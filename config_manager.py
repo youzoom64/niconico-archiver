@@ -1,0 +1,206 @@
+import json
+import os
+from datetime import datetime
+
+class ConfigManager:
+    def __init__(self):
+        # 絶対パスに変換
+        self.config_dir = os.path.abspath("config")
+        self.users_dir = os.path.join(self.config_dir, "users")
+        self.current_users_file = os.path.join(self.config_dir, "current_users.json")
+        self.ensure_directories()
+    
+    def ensure_directories(self):
+        """必要なディレクトリを作成"""
+        os.makedirs(self.users_dir, exist_ok=True)
+        
+        # デフォルト設定を作成
+        if not os.path.exists(os.path.join(self.users_dir, "default.json")):
+            self.create_default_config()
+    
+    def create_default_config(self):
+        """デフォルト設定を作成"""
+        default_config = {
+            "account_id": "default",
+            "display_name": "デフォルト設定",
+            "basic_settings": {
+                "platform": "niconico",
+                "account_id": "default",
+                "platform_directory": "rec",
+                "ncv_directory": "ncv"
+            },
+            "api_settings": {
+                "openai_api_key": ""
+            },
+            "ai_features": {
+                "enable_summary_text": True,
+                "enable_summary_image": True,
+                "enable_ai_music": True,
+                "enable_ai_conversation": True
+            },
+            "ai_prompts": {
+                "summary_prompt": "以下の配信内容を日本語で要約してください:",
+                "intro_conversation_prompt": "配信開始前の会話として、以下の内容について2人のAIが話します:",
+                "outro_conversation_prompt": "配信終了後の振り返りとして、以下の内容について2人のAIが話します:",
+                "image_prompt": "この配信の抽象的なイメージを生成してください:"
+            },
+            "display_features": {
+                "enable_emotion_scores": True,
+                "enable_comment_ranking": True,
+                "enable_word_ranking": True,
+                "enable_thumbnails": True,
+                "enable_audio_player": True,
+                "enable_timeshift_jump": True
+            },
+            "special_users": [],
+            "last_updated": datetime.now().isoformat()
+        }
+        self.save_user_config("default", default_config)
+    
+    def save_user_config(self, account_id, config):
+        """ユーザー設定を保存（アカウントIDベース）"""
+        config["last_updated"] = datetime.now().isoformat()
+        config_path = os.path.join(self.users_dir, f"{account_id}.json")
+        
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    
+    def load_user_config(self, account_id):
+        """ユーザー設定を読み込み（アカウントIDベース）"""
+        config_path = os.path.join(self.users_dir, f"{account_id}.json")
+        
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                
+                # 古い設定ファイルとの互換性を保つため、不足項目を補完
+                default_config = self.get_default_config_template()
+                self._merge_config(default_config, config)
+                return default_config
+        else:
+            return self.load_user_config("default")
+    
+    def get_default_config_template(self):
+        """デフォルト設定テンプレートを取得"""
+        return {
+            "account_id": "",
+            "display_name": "",
+            "basic_settings": {
+                "platform": "niconico",
+                "account_id": "",
+                "platform_directory": "rec",
+                "ncv_directory": "ncv"
+            },
+            "api_settings": {
+                "openai_api_key": ""
+            },
+            "ai_features": {
+                "enable_summary_text": True,
+                "enable_summary_image": True,
+                "enable_ai_music": True,
+                "enable_ai_conversation": True
+            },
+            "ai_prompts": {
+                "summary_prompt": "以下の配信内容を日本語で要約してください:",
+                "intro_conversation_prompt": "配信開始前の会話として、以下の内容について2人のAIが話します:",
+                "outro_conversation_prompt": "配信終了後の振り返りとして、以下の内容について2人のAIが話します:",
+                "image_prompt": "この配信の抽象的なイメージを生成してください:"
+            },
+            "display_features": {
+                "enable_emotion_scores": True,
+                "enable_comment_ranking": True,
+                "enable_word_ranking": True,
+                "enable_thumbnails": True,
+                "enable_audio_player": True,
+                "enable_timeshift_jump": True
+            },
+            "special_users": []
+        }
+    
+    def _merge_config(self, default, loaded):
+        """設定をマージして不足項目を補完"""
+        for key, value in loaded.items():
+            if key in default:
+                if isinstance(value, dict) and isinstance(default[key], dict):
+                    self._merge_config(default[key], value)
+                else:
+                    default[key] = value
+    
+    def get_user_list(self):
+        """ユーザーリストを取得（アカウントIDのリスト）"""
+        if not os.path.exists(self.users_dir):
+            return ["default"]
+        
+        account_ids = []
+        for filename in os.listdir(self.users_dir):
+            if filename.endswith('.json'):
+                account_id = filename[:-5]  # .jsonを除去
+                account_ids.append(account_id)
+        
+        return sorted(account_ids)
+    
+    def get_user_display_info(self):
+        """ユーザー表示情報を取得（アカウントID + 表示名）"""
+        user_info = []
+        for account_id in self.get_user_list():
+            config = self.load_user_config(account_id)
+            display_name = config.get("display_name", "")
+            platform = config["basic_settings"]["platform"]
+            
+            if display_name:
+                label = f"{account_id} ({display_name})"
+            else:
+                label = account_id
+            
+            user_info.append({
+                "account_id": account_id,
+                "display_name": display_name,
+                "platform": platform,
+                "label": label
+            })
+        
+        return user_info
+    
+    def delete_user(self, account_id):
+        """ユーザー設定を削除"""
+        if account_id == "default":
+            return False
+        
+        config_path = os.path.join(self.users_dir, f"{account_id}.json")
+        if os.path.exists(config_path):
+            os.remove(config_path)
+            return True
+        return False
+    
+    def user_exists(self, account_id):
+        """ユーザーが存在するかチェック"""
+        config_path = os.path.join(self.users_dir, f"{account_id}.json")
+        return os.path.exists(config_path)
+    
+    def save_current_users(self, active_users):
+        """現在監視中のユーザーリストを保存"""
+        data = {
+            "active_users": active_users,
+            "last_updated": datetime.now().isoformat()
+        }
+        
+        with open(self.current_users_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    def load_current_users(self):
+        """現在監視中のユーザーリストを読み込み"""
+        if os.path.exists(self.current_users_file):
+            with open(self.current_users_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("active_users", [])
+        return []
+    
+    def copy_user_config(self, source_account_id, target_account_id):
+        """ユーザー設定を複製"""
+        if self.user_exists(source_account_id) and not self.user_exists(target_account_id):
+            config = self.load_user_config(source_account_id)
+            config["account_id"] = target_account_id
+            config["basic_settings"]["account_id"] = target_account_id
+            self.save_user_config(target_account_id, config)
+            return True
+        return False
