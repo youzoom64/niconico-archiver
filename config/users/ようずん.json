@@ -1,0 +1,23 @@
+{
+  "user_name": "ようずん",
+  "basic_settings": {
+    "platform": "niconico",
+    "account_id": "",
+    "platform_directory": "rec",
+    "ncv_directory": "ncv"
+  },
+  "ai_features": {
+    "enable_summary_text": true,
+    "enable_summary_image": true,
+    "enable_ai_music": true,
+    "enable_ai_conversation": true
+  },
+  "display_features": {
+    "enable_emotion_scores": true,
+    "enable_comment_ranking": true,
+    "enable_word_ranking": true,
+    "enable_thumbnails": true,
+    "enable_audio_player": true
+  },
+  "last_updated": "2025-09-07T05:37:10.218264"
+}

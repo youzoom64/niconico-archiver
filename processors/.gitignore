@@ -1,0 +1,91 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Config
+config/users/*.json
+!config/users/default.json
+config/current_users.json
+
+# Logs
+logs/
+*.log
+
+# Temp files
+temp/
+tmp/
+*.tmp
+
+# Media files (動画・音声)
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mkv
+
+# Generated files
+*.xml
+*.html
+screenshot/
+audio_chunk_*.mp3
+*_full_audio.mp3
+*_silent_audio.mp3
+*_transcript.json
+*_data.json
+
+# API Keys (セキュリティ)
+.env
+secrets.json
+api_keys.txt
+
+# Windows
+*.exe
+*.msi
+
+# Model cache (Whisper)
+~/.cache/whisper/
+
+# ffmpeg logs
+ffmpeg*.log
