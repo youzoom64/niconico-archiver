@@ -1,9 +1,14 @@
 import os
 import json
 import math
+import sys
 from moviepy.editor import VideoFileClip
 from pydub import AudioSegment
 from faster_whisper import WhisperModel
+
+# utils.pyからfind_account_directoryをインポート
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import find_account_directory
 
 def process(pipeline_data):
     """Step02: 音声抽出と文字起こし"""
@@ -14,7 +19,7 @@ def process(pipeline_data):
         
         print(f"Step02 開始: {lv_value}")
         
-        # 1. アカウントディレクトリ検索
+        # 1. アカウントディレクトリ検索（utils.pyの関数を使用）
         account_dir = find_account_directory(platform_directory, account_id)
         
         # 2. 放送ディレクトリ取得
@@ -44,34 +49,6 @@ def process(pipeline_data):
         print(f"Step02 エラー: {str(e)}")
         raise
 
-def find_account_directory(platform_directory, account_id):
-    """アカウントIDを含むディレクトリを検索"""
-    try:
-        if not os.path.exists(platform_directory):
-            raise Exception(f"監視ディレクトリが存在しません: {platform_directory}")
-        
-        # ディレクトリ一覧を取得
-        for dirname in os.listdir(platform_directory):
-            dir_path = os.path.join(platform_directory, dirname)
-            
-            if os.path.isdir(dir_path):
-                # アンダースコア前の数字部分を抽出
-                if '_' in dirname:
-                    id_part = dirname.split('_')[0]
-                else:
-                    id_part = dirname
-                
-                # アカウントIDと一致するかチェック
-                if id_part == account_id:
-                    print(f"アカウントディレクトリ発見: {dir_path}")
-                    return dir_path
-        
-        raise Exception(f"アカウントID {account_id} のディレクトリが見つかりません")
-        
-    except Exception as e:
-        print(f"ディレクトリ検索エラー: {str(e)}")
-        raise
-
 def find_mp4_file(account_dir, lv_value):
     """MP4ファイルを検索"""
     if not os.path.exists(account_dir):
@@ -84,6 +61,7 @@ def find_mp4_file(account_dir, lv_value):
             return mp4_path
     
     return None
+
 
 def get_time_diff_from_json(broadcast_dir, lv_value):
     """JSONファイルからtime_diff_seconds取得"""
