@@ -108,10 +108,37 @@ class UserConfigWindow:
         # API設定
         api_frame = tk.LabelFrame(scrollable_frame, text="API設定")
         api_frame.pack(fill=tk.X, pady=5)
-        
-        tk.Label(api_frame, text="OpenAI API Key:").pack(anchor=tk.W)
-        self.api_key_var = tk.StringVar()
-        tk.Entry(api_frame, textvariable=self.api_key_var, show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+
+        # AIモデル選択
+        tk.Label(api_frame, text="要約AIモデル:").pack(anchor=tk.W)
+        self.ai_model_var = tk.StringVar(value="openai-gpt4o")
+        model_frame = tk.Frame(api_frame)
+        model_frame.pack(fill=tk.X, padx=5, pady=2)
+
+        model_combo = ttk.Combobox(model_frame, textvariable=self.ai_model_var, 
+                                values=["openai-gpt4o", "google-gemini-2.5-flash"], 
+                                state="readonly", width=30)
+        model_combo.pack(side=tk.LEFT)
+
+        # OpenAI API Key
+        tk.Label(api_frame, text="OpenAI API Key:").pack(anchor=tk.W, pady=(10, 0))
+        self.openai_api_key_var = tk.StringVar()
+        tk.Entry(api_frame, textvariable=self.openai_api_key_var, show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+
+        # Google API Key
+        tk.Label(api_frame, text="Google API Key:").pack(anchor=tk.W, pady=(10, 0))
+        self.google_api_key_var = tk.StringVar()
+        tk.Entry(api_frame, textvariable=self.google_api_key_var, show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+
+        # Suno API Key
+        tk.Label(api_frame, text="Suno API Key:").pack(anchor=tk.W, pady=(10, 0))
+        self.suno_api_key_var = tk.StringVar()
+        tk.Entry(api_frame, textvariable=self.suno_api_key_var, show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+
+        # Imgur API Key
+        tk.Label(api_frame, text="Imgur API Key:").pack(anchor=tk.W, pady=(10, 0))
+        self.imgur_api_key_var = tk.StringVar()
+        tk.Entry(api_frame, textvariable=self.imgur_api_key_var, show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
         
         # プロンプト設定
         prompt_frame = tk.LabelFrame(scrollable_frame, text="AIプロンプト設定")
@@ -150,21 +177,22 @@ class UserConfigWindow:
         # 表示機能
         display_frame = tk.LabelFrame(scrollable_frame, text="表示機能")
         display_frame.pack(fill=tk.X, pady=5)
-        
+
         self.emotion_scores_var = tk.BooleanVar(value=True)
         self.comment_ranking_var = tk.BooleanVar(value=True)
         self.word_ranking_var = tk.BooleanVar(value=True)
         self.thumbnails_var = tk.BooleanVar(value=True)
         self.audio_player_var = tk.BooleanVar(value=True)
         self.timeshift_jump_var = tk.BooleanVar(value=True)
-        
+
         tk.Checkbutton(display_frame, text="感情スコア表示", variable=self.emotion_scores_var).pack(anchor=tk.W)
         tk.Checkbutton(display_frame, text="コメントランキング", variable=self.comment_ranking_var).pack(anchor=tk.W)
         tk.Checkbutton(display_frame, text="単語ランキング", variable=self.word_ranking_var).pack(anchor=tk.W)
         tk.Checkbutton(display_frame, text="サムネイル表示", variable=self.thumbnails_var).pack(anchor=tk.W)
-        tk.Checkbutton(display_frame, text="音声プレイヤー", variable=self.audio_player_var).pack(anchor=tk.X)
-        tk.Checkbutton(display_frame, text="タイムシフトジャンプ", variable=self.timeshift_jump_var).pack(anchor=tk.W)
-        
+        tk.Checkbutton(display_frame, text="音声プレイヤー", variable=self.audio_player_var).pack(anchor=tk.W)
+        tk.Checkbutton(display_frame, text="タイムシフトジャンプ", variable=self.timeshift_jump_var).pack(anchor=tk.W)  
+
+
         # スペシャルユーザー設定
         special_frame = tk.LabelFrame(scrollable_frame, text="スペシャルユーザー設定")
         special_frame.pack(fill=tk.X, pady=5)
@@ -201,37 +229,60 @@ class UserConfigWindow:
             self.load_user_config(account_id)
             
     def load_user_config(self, account_id):
-        config = self.config_manager.load_user_config(account_id)
-        self.current_config = config
-        self.current_account_id = account_id
-        
-        self.display_name_var.set(config.get("display_name", ""))
-        self.account_var.set(config["basic_settings"]["account_id"])
-        self.platform_var.set(config["basic_settings"]["platform"])
-        self.platform_dir_var.set(config["basic_settings"]["platform_directory"])
-        self.ncv_dir_var.set(config["basic_settings"]["ncv_directory"])
-        
-        self.api_key_var.set(config["api_settings"]["openai_api_key"])
-        
-        self.summary_prompt_var.set(config["ai_prompts"]["summary_prompt"])
-        self.intro_conversation_prompt_var.set(config["ai_prompts"]["intro_conversation_prompt"])
-        self.outro_conversation_prompt_var.set(config["ai_prompts"]["outro_conversation_prompt"])
-        self.image_prompt_var.set(config["ai_prompts"]["image_prompt"])
-        
-        self.summary_text_var.set(config["ai_features"]["enable_summary_text"])
-        self.summary_image_var.set(config["ai_features"]["enable_summary_image"])
-        self.ai_music_var.set(config["ai_features"]["enable_ai_music"])
-        self.ai_conversation_var.set(config["ai_features"]["enable_ai_conversation"])
-        
-        self.emotion_scores_var.set(config["display_features"]["enable_emotion_scores"])
-        self.comment_ranking_var.set(config["display_features"]["enable_comment_ranking"])
-        self.word_ranking_var.set(config["display_features"]["enable_word_ranking"])
-        self.thumbnails_var.set(config["display_features"]["enable_thumbnails"])
-        self.audio_player_var.set(config["display_features"]["enable_audio_player"])
-        self.timeshift_jump_var.set(config["display_features"]["enable_timeshift_jump"])
-        
-        self.special_users_var.set(", ".join(config["special_users"]))
-        self.update_special_users_list(config["special_users"])
+        try:
+            config = self.config_manager.load_user_config(account_id)
+            self.current_config = config
+            self.current_account_id = account_id
+            
+            # 基本設定
+            self.display_name_var.set(config.get("display_name", ""))
+            self.account_var.set(config["basic_settings"]["account_id"])
+            self.platform_var.set(config["basic_settings"]["platform"])
+            self.platform_dir_var.set(config["basic_settings"]["platform_directory"])
+            self.ncv_dir_var.set(config["basic_settings"]["ncv_directory"])
+            
+            # API設定
+            api_settings = config.get("api_settings", {})
+            self.ai_model_var.set(config["api_settings"].get("ai_model", "openai-gpt4o"))
+            self.openai_api_key_var.set(config["api_settings"].get("openai_api_key", ""))
+            self.google_api_key_var.set(config["api_settings"].get("google_api_key", ""))
+            self.suno_api_key_var.set(config["api_settings"].get("suno_api_key", ""))
+            self.imgur_api_key_var.set(config["api_settings"].get("imgur_api_key", ""))  # 追加
+            
+            # プロンプト設定
+            ai_prompts = config.get("ai_prompts", {})
+            self.summary_prompt_var.set(ai_prompts.get("summary_prompt", "以下の配信内容を日本語で要約してください:"))
+            self.intro_conversation_prompt_var.set(ai_prompts.get("intro_conversation_prompt", "配信開始前の会話として、以下の内容について2人のAIが話します:"))
+            self.outro_conversation_prompt_var.set(ai_prompts.get("outro_conversation_prompt", "配信終了後の振り返りとして、以下の内容について2人のAIが話します:"))
+            self.image_prompt_var.set(ai_prompts.get("image_prompt", "この配信の抽象的なイメージを生成してください:"))
+            
+            # AI機能
+            ai_features = config.get("ai_features", {})
+            self.summary_text_var.set(ai_features.get("enable_summary_text", True))
+            self.summary_image_var.set(ai_features.get("enable_summary_image", True))
+            self.ai_music_var.set(ai_features.get("enable_ai_music", True))
+            self.ai_conversation_var.set(ai_features.get("enable_ai_conversation", True))
+            
+            # 表示機能
+            display_features = config.get("display_features", {})
+            self.emotion_scores_var.set(display_features.get("enable_emotion_scores", True))
+            self.comment_ranking_var.set(display_features.get("enable_comment_ranking", True))
+            self.word_ranking_var.set(display_features.get("enable_word_ranking", True))
+            self.thumbnails_var.set(display_features.get("enable_thumbnails", True))
+            self.audio_player_var.set(display_features.get("enable_audio_player", True))
+            self.timeshift_jump_var.set(display_features.get("enable_timeshift_jump", True))
+            
+            # スペシャルユーザー
+            special_users = config.get("special_users", [])
+            self.special_users_var.set(", ".join(special_users))
+            self.update_special_users_list(special_users)
+            
+            print(f"設定読み込み完了: {account_id}")
+            
+        except Exception as e:
+            print(f"設定読み込みエラー: {e}")
+            import traceback
+            traceback.print_exc()
         
     def update_special_users_list(self, special_users):
         """スペシャルユーザー一覧表示を更新"""
@@ -304,7 +355,11 @@ class UserConfigWindow:
                 "ncv_directory": self.ncv_dir_var.get()
             },
             "api_settings": {
-                "openai_api_key": self.api_key_var.get()
+                "ai_model": self.ai_model_var.get(),
+                "openai_api_key": self.openai_api_key_var.get(),
+                "google_api_key": self.google_api_key_var.get(),
+                "suno_api_key": self.suno_api_key_var.get(),
+                "imgur_api_key": self.imgur_api_key_var.get()  # 追加
             },
             "ai_features": {
                 "enable_summary_text": self.summary_text_var.get(),
