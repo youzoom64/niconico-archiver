@@ -30,7 +30,11 @@ class ConfigManager:
                 "ncv_directory": "ncv"
             },
             "api_settings": {
-                "openai_api_key": ""
+                "ai_model": "openai-gpt4o",
+                "openai_api_key": "",
+                "google_api_key": "",
+                "suno_api_key": "",
+                "imgur_api_key": ""  # 追加
             },
             "ai_features": {
                 "enable_summary_text": True,
@@ -92,7 +96,11 @@ class ConfigManager:
                 "ncv_directory": "ncv"
             },
             "api_settings": {
-                "openai_api_key": ""
+                "ai_model": "openai-gpt4o",
+                "openai_api_key": "",
+                "google_api_key": "",
+                "suno_api_key": "",
+                "imgur_api_key": ""  # 追加
             },
             "ai_features": {
                 "enable_summary_text": True,
