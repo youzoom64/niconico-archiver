@@ -131,7 +131,6 @@ class Mp4Monitor:
                 self.config["basic_settings"]["platform_directory"],
                 self.config["basic_settings"]["ncv_directory"],
                 lv_value,
-                self.user_name  # 設定ファイル名として使用
             ]
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)

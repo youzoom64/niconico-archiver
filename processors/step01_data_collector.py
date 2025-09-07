@@ -19,7 +19,8 @@ def process(pipeline_data):
         
         # 1. ディレクトリ構造作成
         account_dir = find_account_directory(platform_directory, account_id)
-        broadcast_dir = create_broadcast_directory(account_dir, lv_value)
+        broadcast_dir = os.path.join(account_dir, lv_value)  # 直接作成
+        os.makedirs(broadcast_dir, exist_ok=True)
 
         # 2. 元URLのHTML取得・保存
         html_content = fetch_and_save_html(lv_value, broadcast_dir)
@@ -48,15 +49,7 @@ def process(pipeline_data):
     except Exception as e:
         print(f"Step01 エラー: {str(e)}")
         raise
-
-def create_broadcast_directory(platform_directory, account_id, lv_value):
-    """放送ディレクトリ作成"""
-    # アカウントディレクトリを探す
-    account_dir = find_account_directory(platform_directory, account_id)
-    broadcast_dir = os.path.join(account_dir, lv_value)
-    os.makedirs(broadcast_dir, exist_ok=True)
-    return broadcast_dir
-
+    
 def find_account_directory(platform_directory, account_id):
     """アカウントIDを含むディレクトリを検索"""
     if not os.path.exists(platform_directory):
