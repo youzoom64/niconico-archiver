@@ -39,7 +39,7 @@ def process(pipeline_data):
         # 7. 統合JSON作成
         broadcast_data = create_broadcast_json(
             lv_value, ncv_data, server_time, video_duration, 
-            previous_summary, broadcast_dir, ncv_xml_path, platform_xml_path
+            previous_summary, broadcast_dir, ncv_xml_path, platform_xml_path, account_dir
         )
         
         print(f"Step01 完了: {lv_value}")
@@ -272,8 +272,8 @@ def create_broadcast_json(lv_value, ncv_data, server_time, video_duration, previ
         'time_diff_seconds': time_diff_seconds,
         
         # ディレクトリパス
-        'account_directory_path': account_dir_path,  # 追加
-        'broadcast_directory_path': broadcast_dir,   # 追加
+        'account_directory_path': account_dir_path,
+        'broadcast_directory_path': broadcast_dir,
         
         # XMLファイルパス
         'ncv_xml_path': ncv_xml_path,
