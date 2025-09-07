@@ -96,9 +96,7 @@ def run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_val
         return 1
 
 def main():
-    """メイン関数"""
-    if len(sys.argv) != 7:
-        print("使用方法: python pipeline.py platform account_id platform_directory ncv_directory lv_value config_account_id", file=sys.stderr)
+    if len(sys.argv) != 6:  # 6個に変更
         return 1
     
     platform = sys.argv[1]
@@ -106,9 +104,7 @@ def main():
     platform_directory = sys.argv[3]
     ncv_directory = sys.argv[4]
     lv_value = sys.argv[5]
-    config_account_id = sys.argv[6]
     
-    return run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_value, config_account_id)
-
+    return run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_value, account_id)
 if __name__ == "__main__":
     sys.exit(main())
