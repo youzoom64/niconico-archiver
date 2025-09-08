@@ -11,6 +11,21 @@ from faster_whisper import WhisperModel
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import find_account_directory
 
+def get_optimal_device_config():
+    """最適なデバイスと設定を取得"""
+    if torch.cuda.is_available():
+        device = "cuda"
+        compute_type = "float16"  # GPU用
+        print(f"GPU利用可能: {torch.cuda.get_device_name()}")
+        print(f"CUDA Version: {torch.version.cuda}")
+    else:
+        device = "cpu"
+        compute_type = "int8"  # CPU用
+        print("GPU利用不可、CPUモードで実行")
+    
+    return device, compute_type
+
+
 def process(pipeline_data):
     """Step02: 音声抽出と文字起こし"""
     try:
@@ -38,7 +53,7 @@ def process(pipeline_data):
         audio_files = extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec)
         
         # 6. 文字起こし実行
-        transcripts = transcribe_audio_files(audio_files, parsec)
+        transcripts = transcribe_audio_files(audio_files, parsec, pipeline_data.get('config'))
         
         # 7. transcript.json保存
         save_transcript_json(broadcast_dir, lv_value, transcripts)
@@ -136,37 +151,68 @@ def extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec=0):
         print(f"音声抽出エラー: {str(e)}")
         raise
 
-def transcribe_audio_files(audio_files, parsec):
+def get_optimal_device_config():
+    """最適なデバイスと設定を取得"""
+    if torch.cuda.is_available():
+        device = "cuda"
+        compute_type = "float16"  # GPU用
+        print(f"GPU利用可能: {torch.cuda.get_device_name()}")
+        print(f"CUDA Version: {torch.version.cuda}")
+    else:
+        device = "cpu"
+        compute_type = "int8"  # CPU用
+        print("GPU利用不可、CPUモードで実行")
+    
+    return device, compute_type
+
+def transcribe_audio_files(audio_files, parsec, config=None):
     """音声ファイルリストを文字起こし"""
     try:
         print("Whisperモデル読み込み中...")
         
-        # 最適なデバイス設定を取得
-        device, compute_type = get_optimal_device_config()
+        # 設定から音声処理パラメータを取得
+        if config:
+            audio_settings = config.get('audio_settings', {})
+            use_gpu = audio_settings.get('use_gpu', True)
+            whisper_model = audio_settings.get('whisper_model', 'large-v3')
+            cpu_threads = audio_settings.get('cpu_threads', 8)
+            beam_size = audio_settings.get('beam_size', 5)
+        else:
+            use_gpu = True
+            whisper_model = 'large-v3'
+            cpu_threads = 8
+            beam_size = 5
         
-        # モデル読み込み（デバイス自動選択）
+        # デバイス設定（ユーザー設定を考慮）
+        device, compute_type = get_optimal_device_config()
+        if not use_gpu:
+            device = "cpu"
+            compute_type = "int8"
+            print("ユーザー設定によりCPUモードを強制使用")
+        
+        # モデル読み込み（設定値を使用）
         model = WhisperModel(
-            "large-v3",  # より新しいモデルを使用
+            whisper_model,
             device=device,
             compute_type=compute_type,
-            num_workers=4 if device == "cpu" else 1,  # CPU時は並列処理
-            cpu_threads=8 if device == "cpu" else 0   # CPU時のスレッド数
+            num_workers=cpu_threads if device == "cpu" else 1,
+            cpu_threads=cpu_threads if device == "cpu" else 0
         )
         
         all_transcripts = []
         
         for file_path, start_time in audio_files:
-            print(f"文字起こし中: {os.path.basename(file_path)} (デバイス: {device})")
+            print(f"文字起こし中: {os.path.basename(file_path)} (デバイス: {device}, モデル: {whisper_model})")
             
-            # GPU使用時はbatch処理も検討
+            # 設定に応じてパラメータを調整
             segments, info = model.transcribe(
                 file_path,
                 language="ja",
                 no_speech_threshold=0.6,
                 vad_filter=True,
                 word_timestamps=False,
-                beam_size=5,  # GPU時は高品質設定
-                temperature=0.0  # 安定した結果のため
+                beam_size=beam_size,  # 設定値を使用
+                temperature=0.0
             )
             
             last_text = None
@@ -175,7 +221,6 @@ def transcribe_audio_files(audio_files, parsec):
             for segment in segments:
                 current_text = segment.text.strip()
                 if current_text and current_text != last_text and len(current_text) > 1:
-                    # タイムスタンプ計算（parsecも考慮）
                     timestamp = math.ceil(segment.start + start_time + parsec)
                     
                     transcript_entry = {
@@ -192,7 +237,6 @@ def transcribe_audio_files(audio_files, parsec):
             
             print(f"  {segment_count}セグメント処理完了")
         
-        # タイムスタンプでソート
         all_transcripts.sort(key=lambda x: x['timestamp'])
         
         print(f"文字起こし完了: 総セグメント数 {len(all_transcripts)} (デバイス: {device})")
