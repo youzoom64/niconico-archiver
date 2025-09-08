@@ -6,6 +6,10 @@ import xml.etree.ElementTree as ET
 import requests
 from datetime import datetime
 import subprocess
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import find_account_directory
+
 
 def process(pipeline_data):
     """Step01: 基本情報抽出とJSON作成"""
@@ -19,11 +23,11 @@ def process(pipeline_data):
         
         # 1. ディレクトリ構造作成
         account_dir = find_account_directory(platform_directory, account_id)
-        broadcast_dir = os.path.join(account_dir, lv_value)  # 直接作成
+        broadcast_dir = os.path.join(account_dir, lv_value)
         os.makedirs(broadcast_dir, exist_ok=True)
 
         # 2. 元URLのHTML取得・保存
-        html_content = fetch_and_save_html(lv_value, broadcast_dir)
+        fetch_and_save_html(lv_value, broadcast_dir)  # 戻り値を無視
         
         # 3. NCVのXMLファイル監視・解析
         ncv_xml_path, ncv_data = wait_and_parse_ncv_xml(ncv_directory, lv_value)
@@ -50,32 +54,6 @@ def process(pipeline_data):
         print(f"Step01 エラー: {str(e)}")
         raise
     
-def find_account_directory(platform_directory, account_id):
-    """アカウントIDを含むディレクトリを検索"""
-    if not os.path.exists(platform_directory):
-        # ディレクトリが存在しない場合は作成
-        account_dir = os.path.join(platform_directory, f"{account_id}_user")
-        os.makedirs(account_dir, exist_ok=True)
-        return account_dir
-    
-    # 既存のディレクトリから検索
-    for dirname in os.listdir(platform_directory):
-        dir_path = os.path.join(platform_directory, dirname)
-        if os.path.isdir(dir_path):
-            if '_' in dirname:
-                id_part = dirname.split('_')[0]
-            else:
-                id_part = dirname
-            
-            if id_part == account_id:
-                return dir_path
-    
-    # 見つからない場合は作成
-    account_dir = os.path.join(platform_directory, f"{account_id}_user")
-    os.makedirs(account_dir, exist_ok=True)
-    return account_dir
-
-
 def fetch_and_save_html(lv_value, broadcast_dir):
     """元URLのHTML取得・保存"""
     try:

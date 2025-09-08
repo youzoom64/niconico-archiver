@@ -29,6 +29,12 @@ class ConfigManager:
                 "platform_directory": "rec",
                 "ncv_directory": "ncv"
             },
+            "audio_settings": {
+                "use_gpu": True,
+                "whisper_model": "large-v3",
+                "cpu_threads": 8,
+                "beam_size": 5
+            },
             "api_settings": {
                 "ai_model": "openai-gpt4o",
                 "openai_api_key": "",
@@ -101,6 +107,12 @@ class ConfigManager:
                 "google_api_key": "",
                 "suno_api_key": "",
                 "imgur_api_key": ""  # 追加
+            },
+            "audio_settings": {
+                "use_gpu": True,
+                "whisper_model": "large-v3", 
+                "cpu_threads": 8,
+                "beam_size": 5
             },
             "ai_features": {
                 "enable_summary_text": True,

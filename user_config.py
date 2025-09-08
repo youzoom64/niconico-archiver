@@ -139,7 +139,22 @@ class UserConfigWindow:
         tk.Label(api_frame, text="Imgur API Key:").pack(anchor=tk.W, pady=(10, 0))
         self.imgur_api_key_var = tk.StringVar()
         tk.Entry(api_frame, textvariable=self.imgur_api_key_var, show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
-        
+
+        # 音声処理設定セクションを追加
+        audio_frame = tk.LabelFrame(scrollable_frame, text="音声処理設定")
+        audio_frame.pack(fill=tk.X, pady=5)
+
+        # GPU使用設定
+        self.use_gpu_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(audio_frame, text="GPU使用 (利用可能な場合)", variable=self.use_gpu_var).pack(anchor=tk.W)
+
+        # Whisperモデル選択
+        tk.Label(audio_frame, text="Whisperモデル:").pack(anchor=tk.W)
+        self.whisper_model_var = tk.StringVar(value="large")
+        model_combo = ttk.Combobox(audio_frame, textvariable=self.whisper_model_var,
+                                values=["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"],
+                                state="readonly", width=30)
+        model_combo.pack(anchor=tk.W, padx=5, pady=2)
         # プロンプト設定
         prompt_frame = tk.LabelFrame(scrollable_frame, text="AIプロンプト設定")
         prompt_frame.pack(fill=tk.X, pady=5)
@@ -249,6 +264,13 @@ class UserConfigWindow:
             self.suno_api_key_var.set(config["api_settings"].get("suno_api_key", ""))
             self.imgur_api_key_var.set(config["api_settings"].get("imgur_api_key", ""))  # 追加
             
+            # 音声処理設定
+            audio_settings = config.get("audio_settings", {})
+            self.use_gpu_var.set(audio_settings.get("use_gpu", True))
+            self.whisper_model_var.set(audio_settings.get("whisper_model", "large-v3"))
+            self.cpu_threads_var.set(audio_settings.get("cpu_threads", 8))
+            self.beam_size_var.set(audio_settings.get("beam_size", 5))
+
             # プロンプト設定
             ai_prompts = config.get("ai_prompts", {})
             self.summary_prompt_var.set(ai_prompts.get("summary_prompt", "以下の配信内容を日本語で要約してください:"))
@@ -262,6 +284,7 @@ class UserConfigWindow:
             self.summary_image_var.set(ai_features.get("enable_summary_image", True))
             self.ai_music_var.set(ai_features.get("enable_ai_music", True))
             self.ai_conversation_var.set(ai_features.get("enable_ai_conversation", True))
+            
             
             # 表示機能
             display_features = config.get("display_features", {})
@@ -360,6 +383,12 @@ class UserConfigWindow:
                 "google_api_key": self.google_api_key_var.get(),
                 "suno_api_key": self.suno_api_key_var.get(),
                 "imgur_api_key": self.imgur_api_key_var.get()  # 追加
+            },
+            "audio_settings": {
+            "use_gpu": self.use_gpu_var.get(),
+            "whisper_model": self.whisper_model_var.get(),
+            "cpu_threads": self.cpu_threads_var.get(),
+            "beam_size": self.beam_size_var.get()
             },
             "ai_features": {
                 "enable_summary_text": self.summary_text_var.get(),
