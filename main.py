@@ -9,6 +9,17 @@ from file_monitor import MultiUserMonitor
 from config_manager import ConfigManager
 from logger import Logger
 
+# GPU状態チェック用
+try:
+    import torch
+    GPU_AVAILABLE = torch.cuda.is_available()
+    GPU_NAME = torch.cuda.get_device_name() if GPU_AVAILABLE else "N/A"
+    CUDA_VERSION = torch.version.cuda if GPU_AVAILABLE else "N/A"
+except ImportError:
+    GPU_AVAILABLE = False
+    GPU_NAME = "PyTorch未インストール"
+    CUDA_VERSION = "N/A"
+
 class MainWindow:
     def __init__(self):
         self.root = tk.Tk()
@@ -17,19 +28,40 @@ class MainWindow:
         
         self.config_manager = ConfigManager()
         self.logger = Logger()
+        
+        # setup_ui()を先に実行してメソッドを定義
+        self.setup_ui()
+        
+        # その後でMultiUserMonitorを初期化
         self.watchdog = MultiUserMonitor(self.logger, self.on_error)
         
-        self.setup_ui()
         self.load_active_users()
-            
+
     def setup_ui(self):
+        # ヘッダー情報
+        info_frame = tk.Frame(self.root)
+        info_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        # GPU情報表示
+        gpu_status = "利用可能" if GPU_AVAILABLE else "利用不可"
+        gpu_color = "green" if GPU_AVAILABLE else "red"
+        
+        gpu_label = tk.Label(info_frame, 
+                            text=f"GPU状態: {gpu_status} ({GPU_NAME})", 
+                            fg=gpu_color, font=("", 9))
+        gpu_label.pack(side=tk.LEFT)
+        
         # ユーザー設定管理ボタン
         btn_frame = tk.Frame(self.root)
         btn_frame.pack(fill=tk.X, padx=10, pady=5)
         
         tk.Button(btn_frame, text="ユーザー設定管理", 
-                 command=self.open_user_config).pack(side=tk.LEFT)
+                command=self.open_user_config).pack(side=tk.LEFT)
         
+        # システム情報ボタンも追加
+        tk.Button(btn_frame, text="システム情報", 
+                command=self.show_system_info).pack(side=tk.LEFT, padx=(10, 0))
+
         # 監視中ユーザー一覧
         user_frame = tk.LabelFrame(self.root, text="監視中アカウント")
         user_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -91,6 +123,32 @@ class MainWindow:
             self.user_tree.insert("", tk.END, text=account_id,
                                 values=(display_name, platform, status))
     
+
+    def show_system_info(self):
+        """システム情報を表示"""
+        import platform
+        
+        info = f"""システム情報:
+        OS: {platform.system()} {platform.release()}
+        Python: {platform.python_version()}
+        GPU利用可能: {GPU_AVAILABLE}
+        GPU名: {GPU_NAME}
+        CUDA Version: {CUDA_VERSION}
+
+        アクティブ監視数: {len(self.watchdog.active_watchers)}
+        登録ユーザー数: {len(self.config_manager.get_user_list())}
+        """
+        
+        # 新しいウィンドウで表示
+        info_window = tk.Toplevel(self.root)
+        info_window.title("システム情報")
+        info_window.geometry("400x300")
+        
+        text_widget = tk.Text(info_window, wrap=tk.WORD)
+        text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        text_widget.insert(1.0, info)
+        text_widget.config(state=tk.DISABLED)
+        
     def on_user_select(self, event):
         selection = self.user_tree.selection()
         if selection:
@@ -102,29 +160,47 @@ class MainWindow:
         self.detail_text.config(state=tk.NORMAL)
         self.detail_text.delete(1.0, tk.END)
         
+        # 音声処理設定を取得（デフォルト値対応）
+        audio_settings = config.get('audio_settings', {})
+        use_gpu = audio_settings.get('use_gpu', True)
+        whisper_model = audio_settings.get('whisper_model', 'large-v3')
+        cpu_threads = audio_settings.get('cpu_threads', 8)
+        
         detail = f"""アカウントID: {config['basic_settings']['account_id']}
-表示名: {config.get('display_name', '未設定')}
-Platform: {config['basic_settings']['platform']}
-監視Dir: {config['basic_settings']['platform_directory']}
-NCVDir: {config['basic_settings']['ncv_directory']}
+        表示名: {config.get('display_name', '未設定')}
+        Platform: {config['basic_settings']['platform']}
+        監視Dir: {config['basic_settings']['platform_directory']}
+        NCVDir: {config['basic_settings']['ncv_directory']}
 
-AI機能:
-  要約テキスト: {'○' if config['ai_features']['enable_summary_text'] else '×'}
-  抽象イメージ: {'○' if config['ai_features']['enable_summary_image'] else '×'}
-  AI音楽: {'○' if config['ai_features']['enable_ai_music'] else '×'}
-  AI会話: {'○' if config['ai_features']['enable_ai_conversation'] else '×'}
+        音声処理設定:
+        GPU使用: {'○' if use_gpu else '×'}
+        Whisperモデル: {whisper_model}
+        CPUスレッド数: {cpu_threads}
 
-表示機能:
-  感情スコア: {'○' if config['display_features']['enable_emotion_scores'] else '×'}
-  ランキング: {'○' if config['display_features']['enable_comment_ranking'] else '×'}
-  単語分析: {'○' if config['display_features']['enable_word_ranking'] else '×'}
-  サムネイル: {'○' if config['display_features']['enable_thumbnails'] else '×'}
+        AI機能:
+        要約テキスト: {'○' if config['ai_features']['enable_summary_text'] else '×'}
+        抽象イメージ: {'○' if config['ai_features']['enable_summary_image'] else '×'}
+        AI音楽: {'○' if config['ai_features']['enable_ai_music'] else '×'}
+        AI会話: {'○' if config['ai_features']['enable_ai_conversation'] else '×'}
 
-スペシャルユーザー: {len(config['special_users'])}人"""
+        表示機能:
+        感情スコア: {'○' if config['display_features']['enable_emotion_scores'] else '×'}
+        ランキング: {'○' if config['display_features']['enable_comment_ranking'] else '×'}
+        単語分析: {'○' if config['display_features']['enable_word_ranking'] else '×'}
+        サムネイル: {'○' if config['display_features']['enable_thumbnails'] else '×'}
+
+        API設定:
+        AIモデル: {config['api_settings'].get('ai_model', 'openai-gpt4o')}
+        OpenAI API: {'設定済み' if config['api_settings'].get('openai_api_key') else '未設定'}
+        Google API: {'設定済み' if config['api_settings'].get('google_api_key') else '未設定'}
+        Suno API: {'設定済み' if config['api_settings'].get('suno_api_key') else '未設定'}
+        Imgur API: {'設定済み' if config['api_settings'].get('imgur_api_key') else '未設定'}
+
+        スペシャルユーザー: {len(config['special_users'])}人"""
         
         self.detail_text.insert(1.0, detail)
         self.detail_text.config(state=tk.DISABLED)
-    
+        
     def start_watch(self):
         selection = self.user_tree.selection()
         if selection:

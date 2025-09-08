@@ -2,6 +2,7 @@ import os
 import json
 import math
 import sys
+import torch
 from moviepy.editor import VideoFileClip
 from pydub import AudioSegment
 from faster_whisper import WhisperModel
@@ -139,18 +140,33 @@ def transcribe_audio_files(audio_files, parsec):
     """音声ファイルリストを文字起こし"""
     try:
         print("Whisperモデル読み込み中...")
-        model = WhisperModel("large-v2", device="cpu", compute_type="int8")
+        
+        # 最適なデバイス設定を取得
+        device, compute_type = get_optimal_device_config()
+        
+        # モデル読み込み（デバイス自動選択）
+        model = WhisperModel(
+            "large-v3",  # より新しいモデルを使用
+            device=device,
+            compute_type=compute_type,
+            num_workers=4 if device == "cpu" else 1,  # CPU時は並列処理
+            cpu_threads=8 if device == "cpu" else 0   # CPU時のスレッド数
+        )
+        
         all_transcripts = []
         
         for file_path, start_time in audio_files:
-            print(f"文字起こし中: {os.path.basename(file_path)}")
+            print(f"文字起こし中: {os.path.basename(file_path)} (デバイス: {device})")
             
-            segments, _ = model.transcribe(
+            # GPU使用時はbatch処理も検討
+            segments, info = model.transcribe(
                 file_path,
                 language="ja",
                 no_speech_threshold=0.6,
                 vad_filter=True,
-                word_timestamps=False
+                word_timestamps=False,
+                beam_size=5,  # GPU時は高品質設定
+                temperature=0.0  # 安定した結果のため
             )
             
             last_text = None
@@ -179,12 +195,72 @@ def transcribe_audio_files(audio_files, parsec):
         # タイムスタンプでソート
         all_transcripts.sort(key=lambda x: x['timestamp'])
         
-        print(f"文字起こし完了: 総セグメント数 {len(all_transcripts)}")
+        print(f"文字起こし完了: 総セグメント数 {len(all_transcripts)} (デバイス: {device})")
         return all_transcripts
         
     except Exception as e:
         print(f"文字起こしエラー: {str(e)}")
+        # GPU失敗時はCPUで再試行
+        if device == "cuda":
+            print("GPU処理失敗、CPUで再試行...")
+            return transcribe_audio_files_cpu_fallback(audio_files, parsec)
         raise
+
+def transcribe_audio_files_cpu_fallback(audio_files, parsec):
+    """CPU フォールバック処理"""
+    try:
+        print("CPUモードで再実行中...")
+        model = WhisperModel(
+            "large-v2",  # CPU用はやや軽量モデル
+            device="cpu",
+            compute_type="int8",
+            num_workers=4,
+            cpu_threads=8
+        )
+        
+        all_transcripts = []
+        
+        for file_path, start_time in audio_files:
+            print(f"文字起こし中 (CPU): {os.path.basename(file_path)}")
+            
+            segments, info = model.transcribe(
+                file_path,
+                language="ja",
+                no_speech_threshold=0.6,
+                vad_filter=True,
+                word_timestamps=False
+            )
+            
+            last_text = None
+            segment_count = 0
+            
+            for segment in segments:
+                current_text = segment.text.strip()
+                if current_text and current_text != last_text and len(current_text) > 1:
+                    timestamp = math.ceil(segment.start + start_time + parsec)
+                    
+                    transcript_entry = {
+                        "timestamp": timestamp,
+                        "text": current_text,
+                        "positive_score": 0.0,
+                        "center_score": 0.0,
+                        "negative_score": 0.0
+                    }
+                    
+                    all_transcripts.append(transcript_entry)
+                    last_text = current_text
+                    segment_count += 1
+            
+            print(f"  {segment_count}セグメント処理完了")
+        
+        all_transcripts.sort(key=lambda x: x['timestamp'])
+        print(f"CPU文字起こし完了: 総セグメント数 {len(all_transcripts)}")
+        return all_transcripts
+        
+    except Exception as e:
+        print(f"CPU文字起こしエラー: {str(e)}")
+        raise
+
 
 def save_transcript_json(broadcast_dir, lv_value, transcripts):
     """transcript.json保存"""
