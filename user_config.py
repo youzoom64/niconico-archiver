@@ -155,6 +155,20 @@ class UserConfigWindow:
                                 values=["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"],
                                 state="readonly", width=30)
         model_combo.pack(anchor=tk.W, padx=5, pady=2)
+
+        # CPUスレッド数設定を追加
+        tk.Label(audio_frame, text="CPUスレッド数:").pack(anchor=tk.W, pady=(10, 0))
+        self.cpu_threads_var = tk.IntVar(value=8)
+        cpu_spin = tk.Spinbox(audio_frame, from_=1, to=32, textvariable=self.cpu_threads_var, width=10)
+        cpu_spin.pack(anchor=tk.W, padx=5, pady=2)
+
+        # ビームサイズ設定を追加
+        tk.Label(audio_frame, text="ビームサイズ (GPU用):").pack(anchor=tk.W, pady=(10, 0))
+        self.beam_size_var = tk.IntVar(value=5)
+        beam_spin = tk.Spinbox(audio_frame, from_=1, to=10, textvariable=self.beam_size_var, width=10)
+        beam_spin.pack(anchor=tk.W, padx=5, pady=2)
+
+
         # プロンプト設定
         prompt_frame = tk.LabelFrame(scrollable_frame, text="AIプロンプト設定")
         prompt_frame.pack(fill=tk.X, pady=5)
