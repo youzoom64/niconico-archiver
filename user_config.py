@@ -178,16 +178,60 @@ class UserConfigWindow:
         tk.Entry(prompt_frame, textvariable=self.summary_prompt_var, width=60).pack(fill=tk.X, padx=5, pady=2)
         
         tk.Label(prompt_frame, text="放送前会話プロンプト:").pack(anchor=tk.W)
-        self.intro_conversation_prompt_var = tk.StringVar(value="配信開始前の会話として、以下の内容について2人のAIが話します:")
+        self.intro_conversation_prompt_var = tk.StringVar(value="配信開始前の会話として、以下の内容について話し合います:")
         tk.Entry(prompt_frame, textvariable=self.intro_conversation_prompt_var, width=60).pack(fill=tk.X, padx=5, pady=2)
         
         tk.Label(prompt_frame, text="放送後会話プロンプト:").pack(anchor=tk.W)
-        self.outro_conversation_prompt_var = tk.StringVar(value="配信終了後の振り返りとして、以下の内容について2人のAIが話します:")
+        self.outro_conversation_prompt_var = tk.StringVar(value="配信終了後の振り返りとして、以下の内容について話し合います:")
         tk.Entry(prompt_frame, textvariable=self.outro_conversation_prompt_var, width=60).pack(fill=tk.X, padx=5, pady=2)
         
         tk.Label(prompt_frame, text="画像プロンプト:").pack(anchor=tk.W)
         self.image_prompt_var = tk.StringVar(value="この配信の抽象的なイメージを生成してください:")
         tk.Entry(prompt_frame, textvariable=self.image_prompt_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        # キャラクター設定セクションを追加
+        character_frame = tk.LabelFrame(scrollable_frame, text="AI会話キャラクター設定")
+        character_frame.pack(fill=tk.X, pady=5)
+        
+        # キャラクター1設定
+        tk.Label(character_frame, text="キャラクター1名前:").pack(anchor=tk.W)
+        self.character1_name_var = tk.StringVar(value="ニニちゃん")
+        tk.Entry(character_frame, textvariable=self.character1_name_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(character_frame, text="キャラクター1性格:").pack(anchor=tk.W)
+        self.character1_personality_var = tk.StringVar(value="ボケ役で標準語を話す明るい女の子")
+        tk.Entry(character_frame, textvariable=self.character1_personality_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(character_frame, text="キャラクター1画像URL:").pack(anchor=tk.W)
+        self.character1_image_url_var = tk.StringVar(value="")
+        tk.Entry(character_frame, textvariable=self.character1_image_url_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        self.character1_image_flip_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(character_frame, text="キャラクター1画像を左右反転", variable=self.character1_image_flip_var).pack(anchor=tk.W, padx=5)
+        
+        # 区切り線
+        tk.Frame(character_frame, height=2, bg="gray").pack(fill=tk.X, padx=5, pady=10)
+        
+        # キャラクター2設定
+        tk.Label(character_frame, text="キャラクター2名前:").pack(anchor=tk.W)
+        self.character2_name_var = tk.StringVar(value="ココちゃん")
+        tk.Entry(character_frame, textvariable=self.character2_name_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(character_frame, text="キャラクター2性格:").pack(anchor=tk.W)
+        self.character2_personality_var = tk.StringVar(value="ツッコミ役で関西弁を話すしっかり者の女の子")
+        tk.Entry(character_frame, textvariable=self.character2_personality_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(character_frame, text="キャラクター2画像URL:").pack(anchor=tk.W)
+        self.character2_image_url_var = tk.StringVar(value="")
+        tk.Entry(character_frame, textvariable=self.character2_image_url_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        self.character2_image_flip_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(character_frame, text="キャラクター2画像を左右反転", variable=self.character2_image_flip_var).pack(anchor=tk.W, padx=5)
+        
+        # 会話設定
+        tk.Label(character_frame, text="会話往復数:").pack(anchor=tk.W, pady=(10, 0))
+        self.conversation_turns_var = tk.IntVar(value=5)
+        tk.Spinbox(character_frame, from_=3, to=10, textvariable=self.conversation_turns_var, width=10).pack(anchor=tk.W, padx=5, pady=2)
         
         # AI生成機能
         ai_frame = tk.LabelFrame(scrollable_frame, text="AI生成機能")
@@ -288,9 +332,20 @@ class UserConfigWindow:
             # プロンプト設定
             ai_prompts = config.get("ai_prompts", {})
             self.summary_prompt_var.set(ai_prompts.get("summary_prompt", "以下の配信内容を日本語で要約してください:"))
-            self.intro_conversation_prompt_var.set(ai_prompts.get("intro_conversation_prompt", "配信開始前の会話として、以下の内容について2人のAIが話します:"))
-            self.outro_conversation_prompt_var.set(ai_prompts.get("outro_conversation_prompt", "配信終了後の振り返りとして、以下の内容について2人のAIが話します:"))
+            self.intro_conversation_prompt_var.set(ai_prompts.get("intro_conversation_prompt", "配信開始前の会話として、以下の内容について話し合います:"))
+            self.outro_conversation_prompt_var.set(ai_prompts.get("outro_conversation_prompt", "配信終了後の振り返りとして、以下の内容について話し合います:"))
             self.image_prompt_var.set(ai_prompts.get("image_prompt", "この配信の抽象的なイメージを生成してください:"))
+            
+            # キャラクター設定
+            self.character1_name_var.set(ai_prompts.get("character1_name", "ニニちゃん"))
+            self.character1_personality_var.set(ai_prompts.get("character1_personality", "ボケ役で標準語を話す明るい女の子"))
+            self.character1_image_url_var.set(ai_prompts.get("character1_image_url", ""))
+            self.character1_image_flip_var.set(ai_prompts.get("character1_image_flip", False))
+            self.character2_name_var.set(ai_prompts.get("character2_name", "ココちゃん"))
+            self.character2_personality_var.set(ai_prompts.get("character2_personality", "ツッコミ役で関西弁を話すしっかり者の女の子"))
+            self.character2_image_url_var.set(ai_prompts.get("character2_image_url", ""))
+            self.character2_image_flip_var.set(ai_prompts.get("character2_image_flip", False))
+            self.conversation_turns_var.set(ai_prompts.get("conversation_turns", 5))
             
             # AI機能
             ai_features = config.get("ai_features", {})
@@ -414,7 +469,16 @@ class UserConfigWindow:
                 "summary_prompt": self.summary_prompt_var.get(),
                 "intro_conversation_prompt": self.intro_conversation_prompt_var.get(),
                 "outro_conversation_prompt": self.outro_conversation_prompt_var.get(),
-                "image_prompt": self.image_prompt_var.get()
+                "image_prompt": self.image_prompt_var.get(),
+                "character1_name": self.character1_name_var.get(),
+                "character1_personality": self.character1_personality_var.get(),
+                "character1_image_url": self.character1_image_url_var.get(),
+                "character1_image_flip": self.character1_image_flip_var.get(),
+                "character2_name": self.character2_name_var.get(),
+                "character2_personality": self.character2_personality_var.get(),
+                "character2_image_url": self.character2_image_url_var.get(),
+                "character2_image_flip": self.character2_image_flip_var.get(),
+                "conversation_turns": self.conversation_turns_var.get()
             },
             "display_features": {
                 "enable_emotion_scores": self.emotion_scores_var.get(),

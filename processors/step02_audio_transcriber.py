@@ -221,10 +221,13 @@ def transcribe_audio_files(audio_files, parsec, config=None):
             for segment in segments:
                 current_text = segment.text.strip()
                 if current_text and current_text != last_text and len(current_text) > 1:
+                    # parsecにはtime_diff_secondsが既に含まれている
                     timestamp = math.ceil(segment.start + start_time + parsec)
+                    timeline_block = (timestamp // 10) * 10
                     
                     transcript_entry = {
                         "timestamp": timestamp,
+                        "timeline_block": timeline_block,
                         "text": current_text,
                         "positive_score": 0.0,
                         "center_score": 0.0,
@@ -281,10 +284,13 @@ def transcribe_audio_files_cpu_fallback(audio_files, parsec):
             for segment in segments:
                 current_text = segment.text.strip()
                 if current_text and current_text != last_text and len(current_text) > 1:
+                    # parsecにはtime_diff_secondsが既に含まれている
                     timestamp = math.ceil(segment.start + start_time + parsec)
+                    timeline_block = (timestamp // 10) * 10
                     
                     transcript_entry = {
                         "timestamp": timestamp,
+                        "timeline_block": timeline_block,
                         "text": current_text,
                         "positive_score": 0.0,
                         "center_score": 0.0,
