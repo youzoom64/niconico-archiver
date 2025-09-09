@@ -79,6 +79,7 @@ audio_chunk_*.mp3
 .env
 secrets.json
 api_keys.txt
+secrets.txt
 
 # Windows
 *.exe
