@@ -33,7 +33,7 @@ def process(pipeline_data):
         ncv_xml_path, ncv_data = wait_and_parse_ncv_xml(ncv_directory, lv_value)
         
         # 4. 監視ディレクトリのXMLからserver_time取得
-        platform_xml_path, server_time = get_server_time_from_xml(platform_directory, lv_value)
+        platform_xml_path, server_time = get_server_time_from_xml(platform_directory, lv_value, account_id)
         
         # 5. 動画時間情報取得
         video_duration = get_video_duration(pipeline_data)
@@ -90,15 +90,27 @@ def wait_and_parse_ncv_xml(ncv_directory, lv_value):
     
     raise Exception(f"NCVのXMLファイルが見つかりません: {lv_value}")
 
-def get_server_time_from_xml(platform_directory, lv_value):
+def get_server_time_from_xml(platform_directory, lv_value, account_id):
     """監視ディレクトリのXMLからserver_time取得（ファイル名部分一致対応）"""
     try:
-        xml_file = find_xml_file_containing_lv(platform_directory, lv_value)
+        # アカウントディレクトリ内を検索
+        account_dir = find_account_directory(platform_directory, account_id)
+        xml_file = find_xml_file_containing_lv(account_dir, lv_value)
+        
         if xml_file:
             tree = ET.parse(xml_file)
             root = tree.getroot()
-            server_time = root.get('server_time', '')
-            return xml_file, server_time  # パスとserver_timeの両方を返す
+            
+            # <thread>要素からserver_timeを取得
+            thread_elem = root.find('.//thread')
+            if thread_elem is not None:
+                server_time = thread_elem.get('server_time', '')
+                print(f"server_time取得成功: {server_time}")
+                return xml_file, server_time
+            else:
+                print("thread要素が見つかりません")
+        else:
+            print(f"XMLファイルが見つかりません: {account_dir}")
         
         return "", ""
         

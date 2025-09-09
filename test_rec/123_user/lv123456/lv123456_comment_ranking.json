@@ -1,0 +1,31 @@
+{
+  "lv_value": "lv123456",
+  "total_users": 2,
+  "created_at": "2025-09-10T08:10:56.497368",
+  "ranking": [
+    {
+      "user_id": "12345",
+      "user_name": "視聴者1",
+      "comment_count": 1,
+      "first_comment": "テストコメント1",
+      "first_comment_time": 0,
+      "last_comment": "テストコメント1",
+      "last_comment_time": 0,
+      "premium": 0,
+      "anonymity": false,
+      "rank": 1
+    },
+    {
+      "user_id": "67890",
+      "user_name": "視聴者2",
+      "comment_count": 1,
+      "first_comment": "テストコメント2",
+      "first_comment_time": 10,
+      "last_comment": "テストコメント2",
+      "last_comment_time": 10,
+      "premium": 0,
+      "anonymity": false,
+      "rank": 2
+    }
+  ]
+}

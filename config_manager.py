@@ -40,7 +40,7 @@ class ConfigManager:
                 "openai_api_key": "",
                 "google_api_key": "",
                 "suno_api_key": "",
-                "imgur_api_key": ""  # 追加
+                "imgur_api_key": ""
             },
             "ai_features": {
                 "enable_summary_text": True,
@@ -50,9 +50,18 @@ class ConfigManager:
             },
             "ai_prompts": {
                 "summary_prompt": "以下の配信内容を日本語で要約してください:",
-                "intro_conversation_prompt": "配信開始前の会話として、以下の内容について2人のAIが話します:",
-                "outro_conversation_prompt": "配信終了後の振り返りとして、以下の内容について2人のAIが話します:",
-                "image_prompt": "この配信の抽象的なイメージを生成してください:"
+                "intro_conversation_prompt": "配信開始前の会話として、以下の内容について話し合います:",
+                "outro_conversation_prompt": "配信終了後の振り返りとして、以下の内容について話し合います:",
+                "image_prompt": "この配信の抽象的なイメージを生成してください:",
+                "character1_name": "ニニちゃん",
+                "character1_personality": "ボケ役で標準語を話す明るい女の子",
+                "character1_image_url": "",
+                "character1_image_flip": False,
+                "character2_name": "ココちゃん",
+                "character2_personality": "ツッコミ役で関西弁を話すしっかり者の女の子",
+                "character2_image_url": "",
+                "character2_image_flip": False,
+                "conversation_turns": 5
             },
             "display_features": {
                 "enable_emotion_scores": True,
@@ -106,7 +115,7 @@ class ConfigManager:
                 "openai_api_key": "",
                 "google_api_key": "",
                 "suno_api_key": "",
-                "imgur_api_key": ""  # 追加
+                "imgur_api_key": ""
             },
             "audio_settings": {
                 "use_gpu": True,
@@ -122,9 +131,14 @@ class ConfigManager:
             },
             "ai_prompts": {
                 "summary_prompt": "以下の配信内容を日本語で要約してください:",
-                "intro_conversation_prompt": "配信開始前の会話として、以下の内容について2人のAIが話します:",
-                "outro_conversation_prompt": "配信終了後の振り返りとして、以下の内容について2人のAIが話します:",
-                "image_prompt": "この配信の抽象的なイメージを生成してください:"
+                "intro_conversation_prompt": "配信開始前の会話として、以下の内容について話し合います:",
+                "outro_conversation_prompt": "配信終了後の振り返りとして、以下の内容について話し合います:",
+                "image_prompt": "この配信の抽象的なイメージを生成してください:",
+                "character1_name": "ニニちゃん",
+                "character1_personality": "ボケ役で標準語を話す明るい女の子",
+                "character2_name": "ココちゃん",
+                "character2_personality": "ツッコミ役で関西弁を話すしっかり者の女の子",
+                "conversation_turns": 5
             },
             "display_features": {
                 "enable_emotion_scores": True,
