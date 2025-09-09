@@ -152,12 +152,14 @@ class Mp4Monitor:
         try:
             print(f"DEBUG: [{self.user_name}] パイプライン呼び出し開始: {lv_value}")
             
-            # 現在の仮想環境のPythonを使用
             import sys
             python_executable = sys.executable
             
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            
             cmd = [
-                python_executable,  # 'python' の代わりに現在のPython実行ファイルを使用
+                python_executable,
                 'pipeline.py',
                 self.config["basic_settings"]["platform"],
                 self.config["basic_settings"]["account_id"],
@@ -168,24 +170,29 @@ class Mp4Monitor:
             
             print(f"DEBUG: [{self.user_name}] 実行コマンド: {' '.join(cmd)}")
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            # Popenでリアルタイム出力
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                env=env
+            )
             
-            print(f"DEBUG: [{self.user_name}] パイプライン終了コード: {result.returncode}")
-            if result.stdout:
-                print(f"DEBUG: [{self.user_name}] 標準出力: {result.stdout}")
-            if result.stderr:
-                print(f"DEBUG: [{self.user_name}] エラー出力: {result.stderr}")
+            # リアルタイムで行ごとに出力
+            for line in iter(process.stdout.readline, ''):
+                print(line.rstrip())
             
-            if result.returncode != 0:
-                self.error_callback(self.user_name, f"パイプライン処理失敗: {result.stderr}")
-            else:
+            process.wait()
+            print(f"DEBUG: [{self.user_name}] パイプライン終了コード: {process.returncode}")
+            
+            if process.returncode == 0:
                 self.logger.log(f"[{self.user_name}] パイプライン処理完了: {lv_value}")
                 
-        except subprocess.TimeoutExpired:
-            self.error_callback(self.user_name, "パイプライン処理がタイムアウトしました")
         except Exception as e:
             print(f"DEBUG: [{self.user_name}] パイプライン呼び出しエラー: {str(e)}")
-            self.error_callback(self.user_name, f"パイプライン呼び出しエラー: {str(e)}")
     
     def watch_loop(self):
         print(f"DEBUG: [{self.user_name}] 監視ループ開始: {self.platform_directory}")

@@ -215,3 +215,25 @@
 2025-09-09 16:38:41 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-09 16:38:41 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-09 16:38:41 - INFO - [123] 自動監視開始
+2025-09-09 19:15:20 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:15:20 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:15:20 - INFO - [123] 自動監視開始
+2025-09-09 19:17:20 - INFO - [123] パイプライン処理完了: lv123456
+2025-09-09 19:27:55 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:27:55 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:27:55 - INFO - [123] 自動監視開始
+2025-09-09 19:30:18 - INFO - [123] パイプライン処理完了: lv123456
+2025-09-09 19:31:23 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:31:23 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:31:23 - INFO - [123] 自動監視開始
+2025-09-09 19:31:35 - INFO - [123] エラー: パイプライン処理失敗
+2025-09-09 19:31:35 - INFO - [123] エラー: パイプライン呼び出しエラー: cannot join current thread
+2025-09-09 19:31:35 - INFO - [123] エラー: 監視ループエラー: cannot join current thread
+2025-09-09 19:33:11 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:33:11 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:33:11 - INFO - [123] 自動監視開始
+2025-09-09 19:34:41 - INFO - [123] パイプライン処理完了: lv123456
+2025-09-09 19:35:35 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:35:35 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-09 19:35:35 - INFO - [123] 自動監視開始
+2025-09-09 19:38:23 - INFO - [123] パイプライン処理完了: lv123456

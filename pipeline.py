@@ -1,4 +1,9 @@
 import sys
+import os
+
+# 環境変数で出力バッファリングを無効化
+os.environ['PYTHONUNBUFFERED'] = '1'
+
 print(f"DEBUG: Pipeline実行Python: {sys.executable}")
 print(f"DEBUG: Python PATH: {sys.path[:3]}")
 try:
@@ -10,10 +15,11 @@ except ImportError as e:
     print(f"DEBUG: moviepy import失敗: {e}")
 
 import json
-import os
 import importlib
 from datetime import datetime
 
+
+os.environ['PYTHONUNBUFFERED'] = '1'
 def load_user_config(account_id):
    """ユーザー設定を読み込む"""
    config_path = f"config/users/{account_id}.json"

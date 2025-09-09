@@ -83,25 +83,24 @@ def generate_music_from_summary(title, summary, api_key):
         
         suno_api = SunoAPI(api_key)
         
-        # 要約から音楽プロンプトを生成
-        music_prompt = create_music_prompt(summary)
+        # 要約テキストをそのまま歌詞として使用
+        lyrics = create_music_prompt(summary)
         
         # 音楽生成実行
         result = suno_api.generate_music(
-            prompt=music_prompt,
+            prompt=lyrics,
             custom_mode=True,
-            instrumental=False,  # 歌詞付き
-            model="V4_5",
-            style="Indie Pop",
+            instrumental=False,
+            model="V4",
+            style="J-Pop, Ballad",
             title=title
         )
         
         if result:
             return {
                 "task_id": result["task_id"],
-                "stream_url": result["stream_url"],
-                "download_url": result.get("download_url", ""),
-                "music_prompt": music_prompt,
+                "songs": result["songs"],
+                "music_prompt": lyrics,
                 "generated_at": datetime.now().isoformat(),
                 "title": title,
                 "status": result.get("status", "generated")
@@ -114,33 +113,16 @@ def generate_music_from_summary(title, summary, api_key):
         return None
 
 def create_music_prompt(summary):
-    """要約テキストから音楽プロンプトを作成"""
-    # 要約を短縮して音楽的な表現に変換
-    prompt_parts = []
-    
-    # 基本的な音楽スタイル
-    prompt_parts.append("A melodic indie pop song")
-    
-    # 要約の内容に基づいてムードを決定
-    if any(word in summary.lower() for word in ['楽しい', '面白い', '笑', 'ゲーム', '楽しみ']):
-        prompt_parts.append("with an upbeat and cheerful melody")
-    elif any(word in summary.lower() for word in ['悲しい', '困難', '問題', '心配']):
-        prompt_parts.append("with a melancholic and reflective tone")
-    elif any(word in summary.lower() for word in ['政治', '社会', '議論', '批判']):
-        prompt_parts.append("with a thoughtful and contemplative mood")
-    else:
-        prompt_parts.append("with a gentle and warm atmosphere")
-    
-    # 歌詞として要約の一部を使用（最大200文字）
-    lyrics_content = summary[:200] if len(summary) > 200 else summary
-    prompt_parts.append(f"Lyrics should reflect the theme: {lyrics_content}")
-    
-    return ", ".join(prompt_parts)
+    """要約テキストを歌詞として使用（V4は最大3000文字）"""
+    lyrics = summary[:3000] if len(summary) > 3000 else summary
+    return lyrics
 
 class SunoAPI:
     def __init__(self, api_key):
         self.api_key = api_key
         self.base_url = "https://api.sunoapi.org/api/v1"
+        self.generate_url = f"{self.base_url}/generate"
+        self.details_url = f"{self.base_url}/generate/record-info"
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -155,7 +137,7 @@ class SunoAPI:
         self.last_request_time = time.time()
     
     def generate_music(self, prompt, custom_mode=False, instrumental=False, 
-                      model="V4_5", style=None, title=None):
+                      model="V4", style=None, title=None):
         """音楽生成"""
         self._rate_limit()
         
@@ -174,7 +156,7 @@ class SunoAPI:
         
         try:
             response = requests.post(
-                f"{self.base_url}/generate",
+                self.generate_url,
                 headers=self.headers,
                 json=data,
                 timeout=30
@@ -182,12 +164,22 @@ class SunoAPI:
             
             if response.status_code == 200:
                 result = response.json()
+                if result.get("code") != 200 or not result.get("data"):
+                    print("API did not return taskId properly")
+                    return None
+                    
                 task_id = result["data"]["taskId"]
-                
                 print(f"音楽生成開始 - TaskID: {task_id}")
-                print("ストリーミングURL取得まで30-40秒待機...")
                 
-                return self._wait_for_urls(task_id)
+                # 完了まで待機してURLを取得
+                songs = self._wait_for_completion(task_id)
+                if songs:
+                    return {
+                        "task_id": task_id,
+                        "songs": songs,
+                        "status": "ready"
+                    }
+                return None
                 
             elif response.status_code == 429:
                 print("クレジット不足")
@@ -203,41 +195,87 @@ class SunoAPI:
             print(f"リクエスト失敗: {e}")
             return None
     
-    def _wait_for_urls(self, task_id):
-        """URLが利用可能になるまで待機"""
-        print("URLの生成を待機中...")
+    def _wait_for_completion(self, task_id):
+        """タスク完了まで待機して楽曲情報を取得"""
+        print("生成を待機中...")
         
-        # 実際の実装では get_task_status API を使用して状態を確認
-        # ここでは簡易的に待機時間を設定
-        for i in range(8):
-            time.sleep(5)
-            print(f"   {(i+1)*5}秒経過...")
-        
-        # 実際のAPIレスポンスに基づいてURLを返す
-        return {
-            "task_id": task_id,
-            "stream_url": f"https://cdn.sunoapi.org/stream/{task_id}.mp3",
-            "download_url": f"https://cdn.sunoapi.org/download/{task_id}.mp3",
-            "status": "ready"
-        }
-
-    def get_task_status(self, task_id):
-        """タスクの状態を確認（実装例）"""
-        self._rate_limit()
-        
-        try:
-            response = requests.get(
-                f"{self.base_url}/task/{task_id}",
-                headers=self.headers,
-                timeout=30
-            )
+        for attempt in range(24):  # 最大4分待機
+            time.sleep(10)
+            print(f"   {(attempt+1)*10}秒経過...")
             
-            if response.status_code == 200:
-                return response.json()
-            else:
-                print(f"ステータス確認エラー: {response.status_code}")
-                return None
+            self._rate_limit()
+            try:
+                response = requests.get(
+                    self.details_url,
+                    headers=self.headers,
+                    params={"taskId": task_id},
+                    timeout=30
+                )
                 
-        except Exception as e:
-            print(f"ステータス確認失敗: {e}")
-            return None
+                if response.status_code != 200:
+                    print(f"詳細取得エラー: {response.status_code}")
+                    continue
+                
+                details_data = response.json()
+                status = details_data.get("data", {}).get("status")
+                print(f"現在のステータス: {status}")
+                
+                if status == "SUCCESS":
+                    print("生成完了!")
+                    songs = self._extract_valid_songs(details_data)
+                    return songs
+                    
+                elif status in ["CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "CALLBACK_EXCEPTION", "SENSITIVE_WORD_ERROR"]:
+                    print(f"タスク失敗: {status}")
+                    return None
+                    
+            except Exception as e:
+                print(f"ステータス確認失敗: {e}")
+                continue
+        
+        print("タイムアウト")
+        return None
+    
+    def _extract_valid_songs(self, details_data):
+        """楽曲データから有効なURLを持つ楽曲を抽出"""
+        response_data = details_data.get("data", {})
+        songs = response_data.get("response", {}).get("sunoData", [])
+        
+        if not songs:
+            return []
+        
+        print(f"{len(songs)}曲が生成されました")
+        valid_songs = []
+        
+        for i, song in enumerate(songs, 1):
+            audio_urls = [
+                song.get('audioUrl'),
+                song.get('sourceAudioUrl'), 
+                song.get('streamAudioUrl'),
+                song.get('sourceStreamAudioUrl')
+            ]
+            
+            valid_audio_urls = []
+            for url in audio_urls:
+                if url:
+                    try:
+                        head_response = requests.head(url, timeout=5)
+                        if head_response.status_code == 200:
+                            valid_audio_urls.append(url)
+                    except:
+                        pass
+            
+            if valid_audio_urls:
+                song_info = {
+                    'id': song.get('id'),
+                    'title': song.get('title'),
+                    'duration': song.get('duration'),
+                    'urls': valid_audio_urls,
+                    'primary_url': valid_audio_urls[0],
+                    'image_url': song.get('imageUrl'),
+                    'tags': song.get('tags'),
+                    'model': song.get('modelName')
+                }
+                valid_songs.append(song_info)
+        
+        return valid_songs
