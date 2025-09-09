@@ -1,4 +1,14 @@
 import sys
+print(f"DEBUG: Pipeline実行Python: {sys.executable}")
+print(f"DEBUG: Python PATH: {sys.path[:3]}")
+try:
+    import moviepy
+    print("DEBUG: moviepy import成功")
+    from moviepy.editor import VideoFileClip
+    print("DEBUG: moviepy.editor import成功")
+except ImportError as e:
+    print(f"DEBUG: moviepy import失敗: {e}")
+
 import json
 import os
 import importlib
@@ -79,10 +89,14 @@ def run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_val
                    else:
                        print(f"[{config_account_id}] スキップ: {step_name} (process関数なし)")
                        
-               except ImportError:
+               except ImportError as e:
                    print(f"[{config_account_id}] スキップ: {step_name} (モジュールなし)")
+                   print(f"[{config_account_id}] ImportError詳細: {e}")
                except Exception as e:
                    print(f"[{config_account_id}] エラー: {step_name} - {str(e)}")
+                   print(f"[{config_account_id}] Exception詳細: {type(e).__name__}: {e}")
+                   import traceback
+                   traceback.print_exc()
                    # エラーが発生してもパイプラインは継続
                    
            else:

@@ -202,18 +202,38 @@ class MainWindow:
         self.detail_text.config(state=tk.DISABLED)
         
     def start_watch(self):
+        print("DEBUG: start_watch が呼び出されました")
         selection = self.user_tree.selection()
+        print(f"DEBUG: selection = {selection}")
+        
         if selection:
             account_id = self.user_tree.item(selection[0])["text"]
+            print(f"DEBUG: account_id = {account_id}")
+            
             config = self.config_manager.load_user_config(account_id)
+            print(f"DEBUG: config loaded")
+            print(f"DEBUG: platform_directory = {config['basic_settings']['platform_directory']}")
             
             if account_id not in self.watchdog.active_watchers:
-                self.watchdog.start_user_watch(account_id, config)
-                display_name = config.get('display_name', '')
-                display_label = f"{account_id} ({display_name})" if display_name else account_id
-                self.log_message(f"[{display_label}] 監視開始")
-                self.refresh_users()
-                self.save_active_users()
+                print(f"DEBUG: 監視開始処理に入ります")
+                try:
+                    result = self.watchdog.start_user_watch(account_id, config)
+                    print(f"DEBUG: start_user_watch の結果 = {result}")
+                    
+                    display_name = config.get('display_name', '')
+                    display_label = f"{account_id} ({display_name})" if display_name else account_id
+                    self.log_message(f"[{display_label}] 監視開始")
+                    self.refresh_users()
+                    self.save_active_users()
+                    print("DEBUG: 監視開始完了")
+                except Exception as e:
+                    print(f"DEBUG: エラー発生 = {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"DEBUG: {account_id} は既に監視中です")
+        else:
+            print("DEBUG: ユーザーが選択されていません")
     
     def stop_watch(self):
         selection = self.user_tree.selection()
