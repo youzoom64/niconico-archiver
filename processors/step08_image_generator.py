@@ -52,7 +52,7 @@ def process(pipeline_data):
             summary_text,
             openai_api_key,
             imgur_api_key,
-            config["ai_prompts"].get("image_prompt", "この配信の抽象的なイメージを生成してください:")
+            config["ai_prompts"].get("image_prompt", "次の文章は、ある生放送の要約です。この生放送の抽象的なイメージを生成してください:")
         )
         
         if image_result:
