@@ -1,7 +1,7 @@
 import json
 import os
-import MeCab
 import collections
+from janome.tokenizer import Tokenizer
 import sys
 
 # utils.pyからfind_account_directoryをインポート
@@ -15,7 +15,7 @@ def process(pipeline_data):
         
         print(f"Step04 開始: {lv_value}")
         
-        # 1. アカウントディレクトリ検索（utils.pyの関数を使用）
+        # 1. アカウントディレクトリ検索
         account_dir = find_account_directory(pipeline_data['platform_directory'], pipeline_data['account_id'])
         broadcast_dir = os.path.join(account_dir, lv_value)
         
@@ -38,7 +38,7 @@ def process(pipeline_data):
         raise
 
 def analyze_word_frequency(transcript_path):
-    """MeCabを使用して単語の出現頻度を分析"""
+    """Janomeを使用して単語の出現頻度を分析"""
     try:
         # transcript.jsonから文字起こしテキストを取得
         with open(transcript_path, "r", encoding="utf-8") as file:
@@ -52,41 +52,33 @@ def analyze_word_frequency(transcript_path):
         
         print(f"分析対象セグメント数: {len(text_segments)}")
         
-        # MeCab初期化
-        mecab = MeCab.Tagger()
+        tokenizer = Tokenizer()
         word_count = collections.Counter()
         
-        # 各セグメントのテキストを形態素解析
         for segment_text in text_segments:
-            node = mecab.parseToNode(segment_text)
-            while node:
-                features = node.feature.split(",")
-                pos = features[0]  # 品詞
-                pos_detail1 = features[1]  # 品詞細分類1
+            for token in tokenizer.tokenize(segment_text):
+                pos = token.part_of_speech.split(",")[0]  # 品詞
+                pos_detail = token.part_of_speech.split(",")[1]  # 品詞細分類1
                 
-                # 名詞の「一般」「固有名詞」のみを対象
-                if pos == "名詞" and pos_detail1 in ["一般", "固有名詞"]:
-                    surface = node.surface
-                    if surface and len(surface) > 1:  # 1文字の単語は除外
+                # 名詞の「一般」「固有名詞」「サ変接続」を対象
+                if pos == "名詞" and pos_detail in ["一般", "固有名詞", "サ変接続"]:
+                    surface = token.surface
+                    if surface and len(surface) > 1:  # 1文字は除外
                         word_count[surface] += 1
-                
-                node = node.next
         
-        # 上位30位を取得
         top_words = word_count.most_common(30)
         
-        # 辞書形式に変換
         word_ranking = []
         for i, (word, count) in enumerate(top_words, 1):
             word_ranking.append({
                 "rank": i,
                 "word": word,
                 "count": count,
-                "font_size": max(50 - i, 12)  # HTMLでのフォントサイズ用
+                "font_size": max(50 - i, 12)
             })
         
         print(f"単語頻度分析完了: 上位{len(word_ranking)}語")
-        for item in word_ranking[:5]:  # 上位5語をサンプル表示
+        for item in word_ranking[:5]:
             print(f"  {item['rank']}位: {item['word']} ({item['count']}回)")
         
         return word_ranking
@@ -104,7 +96,6 @@ def update_broadcast_json(broadcast_dir, lv_value, word_ranking):
             with open(json_path, 'r', encoding='utf-8') as f:
                 broadcast_data = json.load(f)
             
-            # 単語ランキングを追加
             broadcast_data['word_ranking'] = word_ranking
             
             with open(json_path, 'w', encoding='utf-8') as f:
