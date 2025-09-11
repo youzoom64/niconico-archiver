@@ -193,22 +193,186 @@ def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value
         raise
 
 def generate_analysis_text_with_config(comments, config, user_id):
-    """詳細設定を考慮した分析テキストを生成"""
+    """詳細設定を考慮したAI分析テキストを生成"""
     user_detail_config = get_user_detail_config(config, user_id)
     
     if not user_detail_config.get("analysis_enabled", True):
         return "このユーザーの分析は無効化されています。"
     
-    # 基本的な分析は既存の関数を使用
+    # AI分析が有効な場合
+    if user_detail_config.get("analysis_prompt"):
+        ai_model = user_detail_config.get("analysis_ai_model", "openai-gpt4o")
+        
+        if ai_model == "openai-gpt4o":
+            ai_analysis = generate_ai_analysis(comments, config, user_detail_config)
+        elif ai_model == "google-gemini-2.5-flash":
+            ai_analysis = generate_gemini_analysis(comments, config, user_detail_config)
+        else:
+            ai_analysis = None
+        
+        if ai_analysis:
+            return ai_analysis
+    
+    # AI分析が失敗した場合は基本分析
     basic_analysis = generate_analysis_text(comments)
     
-    # 詳細設定がある場合は追加情報を付加
     if user_detail_config.get("description"):
         basic_analysis += f"<br><br><strong>メモ:</strong><br>{user_detail_config['description']}"
     
     return basic_analysis
 
+def generate_ai_analysis(comments, config, user_detail_config):
+    """AI APIを使用してユーザー分析を生成"""
+    try:
+        import openai
+        from datetime import datetime
+        
+        # API設定を取得
+        api_settings = config.get("api_settings", {})
+        ai_model = user_detail_config.get("analysis_ai_model", "openai-gpt4o")
+        
+        # OpenAI APIキーの確認
+        openai_api_key = api_settings.get("openai_api_key", "")
+        if not openai_api_key or ai_model == "google-gemini-2.5-flash":
+            print("OpenAI APIキーが設定されていないか、Geminiモデルが選択されています")
+            return None
+        
+        # コメントデータを整理
+        comment_texts = []
+        for comment in comments:
+            timestamp = format_unix_time(comment.get('date', ''))
+            vpos = format_vpos_to_time(int(comment.get('vpos', 0)))
+            text = comment.get('text', '')
+            comment_texts.append(f"[{timestamp} - 放送内時間:{vpos}] {text}")
+        
+        if not comment_texts:
+            return "分析対象のコメントがありません。"
+        
+        # プロンプトを構築
+        analysis_prompt = user_detail_config.get("analysis_prompt", "")
+        user_data_text = "\n".join(comment_texts)
+        
+        full_prompt = f"""
+{analysis_prompt}
 
+ユーザーID: {user_detail_config['user_id']}
+表示名: {user_detail_config.get('display_name', 'なし')}
+総コメント数: {len(comments)}件
+
+コメント履歴:
+{user_data_text}
+
+上記のデータを基に、このユーザーの詳細な分析を日本語で行ってください。
+分析結果はHTML形式で出力し、<br>タグで改行してください。
+"""
+
+        # OpenAI APIを呼び出し
+        openai.api_key = openai_api_key
+        
+        response = openai.chat.completions.create(
+            model="gpt-4o" if ai_model == "openai-gpt4o" else "gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "あなたは配信コメントの分析専門家です。ユーザーの行動パターンや特徴を詳しく分析してください。"},
+                {"role": "user", "content": full_prompt}
+            ],
+            max_tokens=1500,
+            temperature=0.7
+        )
+        
+        ai_result = response.choices[0].message.content.strip()
+        
+        # 分析結果にメタ情報を追加
+        metadata = f"""
+<div style="background-color: #f0f8ff; padding: 10px; margin: 10px 0; border-left: 4px solid #0066cc;">
+<strong>AI分析情報</strong><br>
+分析モデル: {ai_model}<br>
+分析日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+分析対象: {len(comments)}件のコメント
+</div>
+"""
+        
+        return metadata + ai_result
+        
+    except Exception as e:
+        print(f"AI分析エラー: {str(e)}")
+        return f"AI分析中にエラーが発生しました: {str(e)}"
+
+def format_unix_time(unix_time_str):
+    """UNIX時間を日時表記に変換"""
+    try:
+        unix_time = int(unix_time_str)
+        dt = datetime.fromtimestamp(unix_time)
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return unix_time_str
+
+def format_vpos_to_time(vpos):
+    """vpos（1/100秒単位）を時間表記に変換"""
+    seconds = vpos // 100
+    minutes = seconds // 60
+    hours = minutes // 60
+    
+    return f"{hours:02d}:{minutes%60:02d}:{seconds%60:02d}"
+
+def generate_gemini_analysis(comments, config, user_detail_config):
+    """Google Gemini APIを使用してユーザー分析を生成"""
+    try:
+        import google.generativeai as genai
+        from datetime import datetime
+        
+        # API設定を取得
+        api_settings = config.get("api_settings", {})
+        google_api_key = api_settings.get("google_api_key", "")
+        
+        if not google_api_key:
+            print("Google APIキーが設定されていません")
+            return None
+        
+        # Gemini APIを設定
+        genai.configure(api_key=google_api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        
+        # プロンプトを構築（OpenAIと同様）
+        comment_texts = []
+        for comment in comments:
+            timestamp = format_unix_time(comment.get('date', ''))
+            vpos = format_vpos_to_time(int(comment.get('vpos', 0)))
+            text = comment.get('text', '')
+            comment_texts.append(f"[{timestamp} - 放送内時間:{vpos}] {text}")
+        
+        analysis_prompt = user_detail_config.get("analysis_prompt", "")
+        user_data_text = "\n".join(comment_texts)
+        
+        full_prompt = f"""
+{analysis_prompt}
+
+ユーザーID: {user_detail_config['user_id']}
+表示名: {user_detail_config.get('display_name', 'なし')}
+総コメント数: {len(comments)}件
+
+コメント履歴:
+{user_data_text}
+
+上記のデータを基に、このユーザーの詳細な分析を日本語で行ってください。
+分析結果はHTML形式で出力し、<br>タグで改行してください。
+"""
+
+        response = model.generate_content(full_prompt)
+        
+        metadata = f"""
+<div style="background-color: #f0f8ff; padding: 10px; margin: 10px 0; border-left: 4px solid #0066cc;">
+<strong>AI分析情報</strong><br>
+分析モデル: google-gemini-2.5-flash<br>
+分析日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+分析対象: {len(comments)}件のコメント
+</div>
+"""
+        
+        return metadata + response.text
+        
+    except Exception as e:
+        print(f"Gemini分析エラー: {str(e)}")
+        return f"Gemini分析中にエラーが発生しました: {str(e)}"
 
 def update_user_list_page(user_data, broadcast_data, template_dir, output_dir, lv_value):
     """一覧ページを生成または更新（複数放送対応）"""

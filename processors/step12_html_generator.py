@@ -6,6 +6,8 @@ from datetime import datetime
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import find_account_directory
+from datetime import datetime, timezone, timedelta
+
 
 def process(pipeline_data):
     """Step12: 完全版HTML生成（全機能統合）"""
@@ -490,7 +492,7 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         }}
         .char2-bubble {{
             background: #fce4ec; /* 薄いピンク */
-            border-left: 3px solid #e91e63;
+            border-right: 3px solid #e91e63;
         }}
         .flip-horizontal {{
             transform: scaleX(-1);
@@ -518,29 +520,38 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
     </script>
 """)
 
-        # ヘッダー情報
+        # JST (UTC+9) のタイムゾーンを定義
+        jst = timezone(timedelta(hours=9))
+
+        # ヘッダー情報のHTML生成部分を修正
+        start_time_jst = datetime.fromtimestamp(int(broadcast_data.get('start_time', 0)), tz=jst)
+        end_time_jst = datetime.fromtimestamp(int(broadcast_data.get('end_time', 0)), tz=jst)
+
         html_parts.append(f"""
-    <div class="header">
-        <h1>{html.escape(broadcast_data.get('live_title', ''))}</h1>
-        <div class="stats">
-            <div class="stat-item">
-                <strong>配信者:</strong> {html.escape(broadcast_data.get('broadcaster', ''))}
+            <div class="header">
+                <h1>{html.escape(broadcast_data.get('live_title', ''))}</h1>
+                <div class="stats">
+                    <div class="stat-item">
+                        <strong>配信者:</strong> {html.escape(broadcast_data.get('broadcaster', ''))}
+                    </div>
+                    <div class="stat-item">
+                        <strong>開始時間:</strong> {start_time_jst.strftime('%Y/%m/%d %H:%M')}
+                    </div>
+                    <div class="stat-item">
+                        <strong>終了時間:</strong> {end_time_jst.strftime('%Y/%m/%d %H:%M')}
+                    </div>
+                    <div class="stat-item">
+                        <strong>来場者数:</strong> {broadcast_data.get('watch_count', '0')}人
+                    </div>
+                    <div class="stat-item">
+                        <strong>コメント数:</strong> {broadcast_data.get('comment_count', '0')}コメ
+                    </div>
+                    <div class="stat-item">
+                        <strong>配信時間:</strong> {broadcast_data.get('elapsed_time', '')}
+                    </div>
+                </div>
             </div>
-            <div class="stat-item">
-                <strong>開始時間:</strong> {datetime.fromtimestamp(int(broadcast_data.get('start_time', 0))).strftime('%Y/%m/%d %H:%M')}
-            </div>
-            <div class="stat-item">
-                <strong>来場者数:</strong> {broadcast_data.get('watch_count', '0')}人
-            </div>
-            <div class="stat-item">
-                <strong>コメント数:</strong> {broadcast_data.get('comment_count', '0')}コメ
-            </div>
-            <div class="stat-item">
-                <strong>配信時間:</strong> {broadcast_data.get('elapsed_time', '')}
-            </div>
-        </div>
-    </div>
-""")
+        """)
 
         # 開始前AI会話
         if ai_chats['intro']:
@@ -683,14 +694,6 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
 """)
             html_parts.append("        </div>\n    </div>\n")
 
-        # 高さ調整ゲージ
-        html_parts.append("""
-    <div id="gaugeBarContainer">
-        <label for="gaugeBar">高さ調整:</label><br>
-        <input id="gaugeBar" max="800" min="100" type="range" value="180" />
-    </div>
-""")
-
         # 横並びタイムライン
         html_parts.append("""
     <div class="container">
@@ -821,22 +824,22 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
     </div>
 """)
 
+
         # メタデータ
         html_parts.append(f"""
-    <div class="section">
-        <h2>メタデータ</h2>
-        <ul>
-            <li>LiveNum: {broadcast_data.get('lv_value', '')}</li>
-            <li>配信時間: {broadcast_data.get('elapsed_time', '')}</li>
-            <li>コミュニティ: {html.escape(broadcast_data.get('community_name', ''))}</li>
-            <li>開始時刻: {broadcast_data.get('start_time', '')}</li>
-            <li>終了時刻: {broadcast_data.get('end_time', '')}</li>
-            <li>配信者ID: {broadcast_data.get('owner_id', '')}</li>
-        </ul>
-    </div>
-""")
+            <div class="section">
+                <h2>メタデータ</h2>
+                <ul>
+                    <li>LiveNum: {broadcast_data.get('lv_value', '')}</li>
+                    <li>配信時間: {broadcast_data.get('elapsed_time', '')}</li>
+                    <li>コミュニティ: {html.escape(broadcast_data.get('community_name', ''))}</li>
+                    <li>開始時刻: {start_time_jst.strftime('%Y-%m-%d %H:%M:%S JST')}</li>
+                    <li>終了時刻: {end_time_jst.strftime('%Y-%m-%d %H:%M:%S JST')}</li>
+                    <li>配信者ID: {broadcast_data.get('owner_id', '')}</li>
+                </ul>
+            </div>
+        """)
 
-        # JavaScript
         # JavaScript
         html_parts.append(f"""
     <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4"></script>
