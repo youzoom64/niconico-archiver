@@ -284,6 +284,72 @@ class UserConfigWindow:
         self.special_users_listbox = tk.Listbox(special_frame, height=4)
         self.special_users_listbox.pack(fill=tk.X, padx=5, pady=2)
 
+        # スペシャルユーザー詳細設定
+        special_detail_frame = tk.LabelFrame(scrollable_frame, text="スペシャルユーザー詳細設定")
+        special_detail_frame.pack(fill=tk.X, pady=5)
+
+        # グローバル設定
+        global_frame = tk.LabelFrame(special_detail_frame, text="デフォルト設定")
+        global_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # デフォルト分析有効/無効
+        self.default_analysis_enabled_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(global_frame, text="デフォルトでAI分析を有効にする", 
+                    variable=self.default_analysis_enabled_var).pack(anchor=tk.W, padx=5, pady=2)
+
+        # デフォルトAIモデル
+        tk.Label(global_frame, text="デフォルト分析AIモデル:").pack(anchor=tk.W, padx=5)
+        self.default_analysis_ai_model_var = tk.StringVar(value="openai-gpt4o")
+        default_model_combo = ttk.Combobox(global_frame, textvariable=self.default_analysis_ai_model_var,
+                                        values=["openai-gpt4o", "google-gemini-2.5-flash"],
+                                        state="readonly", width=30)
+        default_model_combo.pack(anchor=tk.W, padx=5, pady=2)
+
+        # デフォルト分析プロンプト
+        tk.Label(global_frame, text="デフォルト分析プロンプト:").pack(anchor=tk.W, padx=5, pady=(10, 0))
+        self.default_analysis_prompt_text = tk.Text(global_frame, height=4, wrap=tk.WORD)
+        self.default_analysis_prompt_text.pack(fill=tk.X, padx=5, pady=2)
+
+        # デフォルトテンプレート
+        tk.Label(global_frame, text="デフォルトテンプレート:").pack(anchor=tk.W, padx=5, pady=(10, 0))
+        self.default_template_var = tk.StringVar(value="user_detail.html")
+        tk.Entry(global_frame, textvariable=self.default_template_var, width=40).pack(anchor=tk.W, padx=5, pady=2)
+
+        # 個別ユーザー設定
+        users_frame = tk.LabelFrame(special_detail_frame, text="個別ユーザー設定")
+        users_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # ユーザー一覧とボタン
+        user_control_frame = tk.Frame(users_frame)
+        user_control_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        tk.Button(user_control_frame, text="ユーザー追加", command=self.add_special_user).pack(side=tk.LEFT, padx=5)
+        tk.Button(user_control_frame, text="編集", command=self.edit_special_user).pack(side=tk.LEFT, padx=5)
+        tk.Button(user_control_frame, text="削除", command=self.remove_special_user).pack(side=tk.LEFT, padx=5)
+        tk.Button(user_control_frame, text="複製", command=self.copy_special_user).pack(side=tk.LEFT, padx=5)
+
+        # ユーザー一覧TreeView
+        self.special_users_tree = ttk.Treeview(users_frame, 
+                                            columns=("display_name", "ai_model", "analysis_enabled", "template"),
+                                            height=8)
+        self.special_users_tree.heading("#0", text="ユーザーID")
+        self.special_users_tree.heading("display_name", text="表示名")
+        self.special_users_tree.heading("ai_model", text="AIモデル")
+        self.special_users_tree.heading("analysis_enabled", text="分析有効")
+        self.special_users_tree.heading("template", text="テンプレート")
+
+        self.special_users_tree.column("#0", width=100)
+        self.special_users_tree.column("display_name", width=120)
+        self.special_users_tree.column("ai_model", width=120)
+        self.special_users_tree.column("analysis_enabled", width=80)
+        self.special_users_tree.column("template", width=120)
+
+        # TreeViewスクロールバー
+        tree_scrollbar = ttk.Scrollbar(users_frame, orient="vertical", command=self.special_users_tree.yview)
+        self.special_users_tree.configure(yscrollcommand=tree_scrollbar.set)
+
+        self.special_users_tree.pack(side="left", fill=tk.BOTH, expand=True, padx=5, pady=5)
+        tree_scrollbar.pack(side="right", fill="y")
         # タグ設定セクションを追加
         tag_frame = tk.LabelFrame(scrollable_frame, text="タグ設定")
         tag_frame.pack(fill=tk.X, pady=5)
@@ -393,6 +459,19 @@ class UserConfigWindow:
             self.tags_var.set(", ".join(tags))
             self.update_tags_list(tags)
 
+            # スペシャルユーザー詳細設定
+            special_users_config = config.get("special_users_config", {})
+            self.default_analysis_enabled_var.set(special_users_config.get("default_analysis_enabled", True))
+            self.default_analysis_ai_model_var.set(special_users_config.get("default_analysis_ai_model", "openai-gpt4o"))
+
+            default_prompt = special_users_config.get("default_analysis_prompt", "以下のユーザーのコメント履歴を分析してください")
+            self.default_analysis_prompt_text.delete(1.0, tk.END)
+            self.default_analysis_prompt_text.insert(1.0, default_prompt)
+
+            self.default_template_var.set(special_users_config.get("default_template", "user_detail.html"))
+
+            # TreeViewに詳細ユーザー設定を読み込み
+            self.load_special_users_tree(special_users_config.get("users", {}))
             print(f"設定読み込み完了: {account_id}")
             
         except Exception as e:
@@ -522,9 +601,47 @@ class UserConfigWindow:
                 "enable_timeshift_jump": self.timeshift_jump_var.get()
             },
             "special_users": [user.strip() for user in self.special_users_var.get().split(",") if user.strip()],
-            "tags": [tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()]
+            "tags": [tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()],
+            "special_users_config": {
+                "default_analysis_enabled": self.default_analysis_enabled_var.get(),
+                "default_analysis_ai_model": self.default_analysis_ai_model_var.get(),
+                "default_analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+                "default_template": self.default_template_var.get(),
+                "users": self.get_special_users_from_tree()
+            }
         }
+    
+    def get_special_users_from_tree(self):
+        """TreeViewからスペシャルユーザー設定を取得"""
+        users_config = {}
         
+        # 実際の詳細データを保存するための辞書（メモリ上で管理）
+        if not hasattr(self, '_tree_user_data'):
+            self._tree_user_data = {}
+        
+        for item in self.special_users_tree.get_children():
+            user_id = self.special_users_tree.item(item)["text"]
+            values = self.special_users_tree.item(item)["values"]
+            
+            # メモリ上のデータがあれば使用、なければデフォルト
+            if user_id in self._tree_user_data:
+                users_config[user_id] = self._tree_user_data[user_id]
+            else:
+                users_config[user_id] = {
+                    "user_id": user_id,
+                    "display_name": values[0] if len(values) > 0 else "",
+                    "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
+                    "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
+                    "template": values[3] if len(values) > 3 else "user_detail.html",
+                    "analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+                    "description": "",
+                    "tags": []
+                }
+        
+        return users_config
+
+
+
     def save_config(self):
         config = self.get_current_config()
         account_id = config["account_id"]
@@ -539,3 +656,259 @@ class UserConfigWindow:
             
     def apply_config(self):
         self.save_config()
+
+    # === apply_config()メソッドの後に追加 ===
+
+    def add_special_user(self):
+        """スペシャルユーザー追加ダイアログ"""
+        dialog = SpecialUserConfigDialog(
+            self.window, 
+            None, 
+            self.default_analysis_ai_model_var.get(),
+            self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+            self.default_template_var.get(),
+            self.default_analysis_enabled_var.get()
+        )
+        
+        if dialog.result:
+            user_config = dialog.result
+            user_id = user_config["user_id"]
+            
+            # メモリ上にデータを保存
+            if not hasattr(self, '_tree_user_data'):
+                self._tree_user_data = {}
+            self._tree_user_data[user_id] = user_config
+            
+            # TreeViewに追加
+            self.special_users_tree.insert("", tk.END, text=user_id,
+                                        values=(user_config["display_name"], 
+                                                user_config["analysis_ai_model"],
+                                                "有効" if user_config["analysis_enabled"] else "無効",
+                                                user_config["template"]))
+            
+            print(f"スペシャルユーザー追加: {user_id}")
+
+    def edit_special_user(self):
+        """選択されたスペシャルユーザーを編集"""
+        selection = self.special_users_tree.selection()
+        if not selection:
+            messagebox.showwarning("警告", "編集するユーザーを選択してください")
+            return
+        
+        item = self.special_users_tree.item(selection[0])
+        user_id = item["text"]
+        
+        # 既存の設定を取得
+        current_config = self.get_special_user_config(user_id)
+        
+        dialog = SpecialUserConfigDialog(
+            self.window, 
+            current_config,
+            self.default_analysis_ai_model_var.get(),
+            self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+            self.default_template_var.get(),
+            self.default_analysis_enabled_var.get()
+        )
+        
+        if dialog.result:
+            # TreeViewを更新
+            user_config = dialog.result
+            self.special_users_tree.item(selection[0], 
+                                    values=(user_config["display_name"],
+                                            user_config["analysis_ai_model"],
+                                            "有効" if user_config["analysis_enabled"] else "無効",
+                                            user_config["template"]))
+
+    def remove_special_user(self):
+        """選択されたスペシャルユーザーを削除"""
+        selection = self.special_users_tree.selection()
+        if not selection:
+            messagebox.showwarning("警告", "削除するユーザーを選択してください")
+            return
+        
+        item = self.special_users_tree.item(selection[0])
+        user_id = item["text"]
+        display_name = item["values"][0]
+        
+        if messagebox.askyesno("削除確認", f"スペシャルユーザー '{user_id} ({display_name})' を削除しますか？"):
+            self.special_users_tree.delete(selection[0])
+
+    def copy_special_user(self):
+        """選択されたスペシャルユーザーを複製"""
+        selection = self.special_users_tree.selection()
+        if not selection:
+            messagebox.showwarning("警告", "複製するユーザーを選択してください")
+            return
+        
+        item = self.special_users_tree.item(selection[0])
+        user_id = item["text"]
+        
+        # 既存の設定を取得
+        current_config = self.get_special_user_config(user_id)
+        if current_config:
+            # ユーザーIDをクリアして複製
+            current_config["user_id"] = ""
+            current_config["display_name"] = f"{current_config['display_name']} のコピー"
+            
+            dialog = SpecialUserConfigDialog(
+                self.window, 
+                current_config,
+                self.default_analysis_ai_model_var.get(),
+                self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+                self.default_template_var.get(),
+                self.default_analysis_enabled_var.get()
+            )
+            
+            if dialog.result:
+                user_config = dialog.result
+                self.special_users_tree.insert("", tk.END, text=user_config["user_id"],
+                                            values=(user_config["display_name"], 
+                                                    user_config["analysis_ai_model"],
+                                                    "有効" if user_config["analysis_enabled"] else "無効",
+                                                    user_config["template"]))
+
+    def get_special_user_config(self, user_id):
+        """TreeViewからユーザー設定を取得"""
+        if hasattr(self, '_tree_user_data') and user_id in self._tree_user_data:
+            return self._tree_user_data[user_id]
+        
+        # TreeViewから基本データを取得
+        for item in self.special_users_tree.get_children():
+            if self.special_users_tree.item(item)["text"] == user_id:
+                values = self.special_users_tree.item(item)["values"]
+                return {
+                    "user_id": user_id,
+                    "display_name": values[0] if len(values) > 0 else "",
+                    "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
+                    "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
+                    "template": values[3] if len(values) > 3 else "user_detail.html",
+                    "analysis_prompt": "",
+                    "description": "",
+                    "tags": []
+                }
+        
+        return None
+    
+class SpecialUserConfigDialog:
+    def __init__(self, parent, existing_config, default_ai_model, default_prompt, default_template, default_enabled):
+        self.result = None
+        
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("スペシャルユーザー設定")
+        self.dialog.geometry("600x600")
+        self.dialog.grab_set()
+        
+        # 設定項目
+        main_frame = tk.Frame(self.dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # ユーザーID
+        tk.Label(main_frame, text="ユーザーID:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.user_id_var = tk.StringVar(value=existing_config["user_id"] if existing_config else "")
+        tk.Entry(main_frame, textvariable=self.user_id_var, width=30).grid(row=0, column=1, sticky=tk.W+tk.E, padx=5, pady=5)
+        
+        # 表示名
+        tk.Label(main_frame, text="表示名:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.display_name_var = tk.StringVar(value=existing_config["display_name"] if existing_config else "")
+        tk.Entry(main_frame, textvariable=self.display_name_var, width=30).grid(row=1, column=1, sticky=tk.W+tk.E, padx=5, pady=5)
+        
+        # 分析有効/無効
+        self.analysis_enabled_var = tk.BooleanVar(value=existing_config["analysis_enabled"] if existing_config else default_enabled)
+        tk.Checkbutton(main_frame, text="AI分析を有効にする", variable=self.analysis_enabled_var).grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
+        
+        # AIモデル選択
+        tk.Label(main_frame, text="分析AIモデル:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=5)
+        self.ai_model_var = tk.StringVar(value=existing_config["analysis_ai_model"] if existing_config else default_ai_model)
+        ai_model_combo = ttk.Combobox(main_frame, textvariable=self.ai_model_var,
+                                    values=["openai-gpt4o", "google-gemini-2.5-flash"],
+                                    state="readonly")
+        ai_model_combo.grid(row=3, column=1, sticky=tk.W+tk.E, padx=5, pady=5)
+        
+        # 分析プロンプト
+        tk.Label(main_frame, text="分析プロンプト:").grid(row=4, column=0, sticky=tk.W+tk.N, padx=5, pady=5)
+        self.analysis_prompt_text = tk.Text(main_frame, height=8, wrap=tk.WORD)
+        self.analysis_prompt_text.grid(row=4, column=1, sticky=tk.W+tk.E+tk.N+tk.S, padx=5, pady=5)
+        
+        prompt_value = existing_config["analysis_prompt"] if existing_config else default_prompt
+        self.analysis_prompt_text.insert(1.0, prompt_value)
+        
+        # テンプレート
+        tk.Label(main_frame, text="テンプレートファイル:").grid(row=5, column=0, sticky=tk.W, padx=5, pady=5)
+        self.template_var = tk.StringVar(value=existing_config["template"] if existing_config else default_template)
+        tk.Entry(main_frame, textvariable=self.template_var, width=30).grid(row=5, column=1, sticky=tk.W+tk.E, padx=5, pady=5)
+        
+        # 説明
+        tk.Label(main_frame, text="説明・メモ:").grid(row=6, column=0, sticky=tk.W+tk.N, padx=5, pady=5)
+        self.description_text = tk.Text(main_frame, height=4, wrap=tk.WORD)
+        self.description_text.grid(row=6, column=1, sticky=tk.W+tk.E+tk.N+tk.S, padx=5, pady=5)
+        
+        description_value = existing_config["description"] if existing_config else ""
+        self.description_text.insert(1.0, description_value)
+        
+        # ボタン
+        button_frame = tk.Frame(main_frame)
+        button_frame.grid(row=7, column=0, columnspan=2, pady=10)
+        
+        tk.Button(button_frame, text="OK", command=self.ok_clicked).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="キャンセル", command=self.cancel_clicked).pack(side=tk.LEFT, padx=5)
+        
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(4, weight=1)
+        main_frame.rowconfigure(6, weight=1)
+    
+    def ok_clicked(self):
+        user_id = self.user_id_var.get().strip()
+        if not user_id:
+            messagebox.showerror("エラー", "ユーザーIDを入力してください")
+            return
+        
+        self.result = {
+            "user_id": user_id,
+            "display_name": self.display_name_var.get().strip(),
+            "analysis_enabled": self.analysis_enabled_var.get(),
+            "analysis_ai_model": self.ai_model_var.get(),
+            "analysis_prompt": self.analysis_prompt_text.get(1.0, tk.END).strip(),
+            "template": self.template_var.get().strip(),
+            "description": self.description_text.get(1.0, tk.END).strip(),
+            "tags": []
+        }
+        self.dialog.destroy()
+    
+    def cancel_clicked(self):
+        self.dialog.destroy()
+
+        # === UserConfigWindowクラス内に追加 ===
+    def load_special_users_tree(self, users_config):
+        """TreeViewにスペシャルユーザー設定を読み込み"""
+        # 既存のアイテムをクリア
+        for item in self.special_users_tree.get_children():
+            self.special_users_tree.delete(item)
+        
+        # 新しいアイテムを追加
+        for user_id, user_config in users_config.items():
+            self.special_users_tree.insert("", tk.END, text=user_id,
+                                        values=(user_config.get("display_name", ""),
+                                                user_config.get("analysis_ai_model", "openai-gpt4o"),
+                                                "有効" if user_config.get("analysis_enabled", True) else "無効",
+                                                user_config.get("template", "user_detail.html")))
+
+    def get_special_users_from_tree(self):
+        """TreeViewからスペシャルユーザー設定を取得"""
+        users_config = {}
+        for item in self.special_users_tree.get_children():
+            user_id = self.special_users_tree.item(item)["text"]
+            values = self.special_users_tree.item(item)["values"]
+            
+            # 実際の設定データは別途保存する必要がある（簡略版）
+            users_config[user_id] = {
+                "user_id": user_id,
+                "display_name": values[0],
+                "analysis_ai_model": values[1],
+                "analysis_enabled": values[2] == "有効",
+                "template": values[3],
+                "analysis_prompt": "",  # 実際には別途保存が必要
+                "description": "",
+                "tags": []
+            }
+        
+        return users_config
