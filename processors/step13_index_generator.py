@@ -607,6 +607,19 @@ def generate_broadcast_items(broadcast_list):
     
     return '\n        '.join(items)
 
+def process_tags(broadcast_list, tags_config):
+    """タグマッチング処理"""
+    for broadcast in broadcast_list:
+        search_text = f"{broadcast['title']} {broadcast['summary_text']} {broadcast['transcript_text']}"
+        search_text = search_text.lower()
+        
+        for tag in tags_config:
+            if tag.lower() in search_text:
+                broadcast['tags'].append(tag)
+    
+    return broadcast_list
+
+
 def create_tag_html(filtered_broadcasts, tag, all_tags):
     """タグページHTML生成"""
     # メイン一覧と同じ構造だが、タイトルを変更

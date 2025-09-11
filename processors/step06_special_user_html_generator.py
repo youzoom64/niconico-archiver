@@ -182,7 +182,7 @@ def update_user_list_page(user_data, broadcast_data, template_dir, output_dir, l
     
     # テンプレート変数を置換
     html_content = template.replace('{{broadcaster_name}}', user_data['user_name'])
-    html_content = html_content.replace('{{thumbnail_url}}', f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{user_data['user_id'][:4]}/{user_data['user_id']}.jpg")
+    html_content = html_content.replace('{{thumbnail_url}}', get_user_icon_path(user_data['user_id']))
     html_content = html_content.replace('{{broadcast_items}}', all_items)
     
     # ファイル保存
@@ -250,7 +250,8 @@ def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir,
     # テンプレート変数を置換
     html_content = template.replace('{{broadcast_title}}', broadcast_data.get('live_title', 'タイトル不明'))
     html_content = html_content.replace('{{start_time}}', format_start_time(broadcast_data.get('start_time', '')))
-    html_content = html_content.replace('{{user_avatar}}', f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{user_data['user_id'][:4]}/{user_data['user_id']}.jpg")
+    html_content = html_content.replace('{{user_avatar}}', get_user_icon_path(user_data['user_id']))
+
     html_content = html_content.replace('{{user_name}}', user_data['user_name'])
     html_content = html_content.replace('{{user_profile_url}}', f"https://www.nicovideo.jp/user/{user_data['user_id']}")
     html_content = html_content.replace('{{user_id}}', user_data['user_id'])
@@ -263,6 +264,17 @@ def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir,
         f.write(html_content)
     
     print(f"個別ページ生成: {output_path}")
+
+def get_user_icon_path(user_id):
+    """ニコニコ動画のユーザーアイコンパスを生成"""
+    if len(user_id) <= 4:
+        # 4桁以下の場合はディレクトリなし
+        return f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{user_id}.jpg"
+    else:
+        # 5桁以上の場合は下4桁を除いた部分がディレクトリ
+        path_prefix = user_id[:-4]
+        return f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{path_prefix}/{user_id}.jpg"
+
 
 def generate_comment_rows(comments):
     """コメントテーブルの行を生成"""

@@ -146,6 +146,7 @@ class ConfigManager:
                 "character2_image_flip": False,       # 追加
                 "conversation_turns": 5
             },
+            "tags": [],
             "display_features": {
                 "enable_emotion_scores": True,
                 "enable_comment_ranking": True,
