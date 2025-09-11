@@ -685,19 +685,30 @@ class UserConfigWindow:
         
         for item in self.special_users_tree.get_children():
             user_id = self.special_users_tree.item(item)["text"]
+            values = self.special_users_tree.item(item)["values"]
             
-            # メモリ上のデータが必須 - TreeViewからの復元はしない
+            # メモリ上のデータがあれば使用、なければTreeViewから復元
             if user_id in self._tree_user_data:
                 users_config[user_id] = self._tree_user_data[user_id].copy()
                 print(f"メモリからデータ取得: {user_id}")
             else:
-                print(f"警告: ユーザー {user_id} のデータがメモリにありません")
-                # データが不完全なのでスキップするか、エラーにする
-                continue
+                print(f"TreeViewからデータ復元: {user_id}")
+                # TreeViewの表示データから復元（continueしない）
+                users_config[user_id] = {
+                    "user_id": user_id,
+                    "display_name": values[0] if len(values) > 0 else "",
+                    "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
+                    "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
+                    "template": values[3] if len(values) > 3 else "user_detail.html",
+                    "analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+                    "description": "",
+                    "tags": []
+                }
+                # 復元したデータをメモリにも保存
+                self._tree_user_data[user_id] = users_config[user_id].copy()
         
         print(f"保存対象ユーザー数: {len(users_config)}")
         return users_config
-
 
 
     def save_config(self):

@@ -193,25 +193,7 @@ class ConfigManager:
                 result[key] = value
         
         return result
-        
-    def load_special_users_tree(self, users_config):
-        """TreeViewにスペシャルユーザー設定を読み込み"""
-        # 既存のアイテムをクリア
-        for item in self.special_users_tree.get_children():
-            self.special_users_tree.delete(item)
-        
-        # 新しいアイテムを追加
-        for user_id, user_config in users_config.items():
-            self.special_users_tree.insert("", tk.END, text=user_id,
-                                        values=(user_config.get("display_name", ""),
-                                                user_config.get("analysis_ai_model", "openai-gpt4o"),
-                                                "有効" if user_config.get("analysis_enabled", True) else "無効",
-                                                user_config.get("template", "user_detail.html")))
-        
-        print(f"詳細ユーザー設定読み込み: {len(users_config)}件")
-
-
-
+    
     def get_default_config_template(self):
         """デフォルト設定テンプレートを取得"""
         return {
