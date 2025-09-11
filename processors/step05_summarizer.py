@@ -26,7 +26,7 @@ def process(pipeline_data):
             return {"summary": ""}
         
         # 3. AI要約生成
-        ai_model = config["api_settings"]["ai_model"]
+        ai_model = config["api_settings"]["summary_ai_model"]  # 要約専用モデル
         summary = generate_summary(transcript_text, config, ai_model)
         
         # 4. 統合JSONに要約を追加
