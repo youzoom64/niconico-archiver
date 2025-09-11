@@ -26,14 +26,16 @@ def process(pipeline_data):
         ranking_data = load_json_file(broadcast_dir, f"{lv_value}_comment_ranking.json")
         
         # 3. 各種データ準備
-        timeline_blocks = create_timeline_blocks(transcript_data, comments_data, lv_value)
+        timeline_data = create_timeline_blocks(transcript_data, comments_data, lv_value)
+        transcript_blocks = timeline_data['transcript_blocks']
+        comment_blocks = timeline_data['comment_blocks']
         word_ranking = prepare_word_ranking(broadcast_data)
         comment_ranking = prepare_comment_ranking(ranking_data, account_dir, lv_value)
         ai_chats = prepare_ai_chats(broadcast_data, config)
         
         # 4. 完全版HTMLを生成
         html_content = generate_complete_html(
-            timeline_blocks, broadcast_data, word_ranking, 
+            timeline_data, broadcast_data, word_ranking, 
             comment_ranking, ai_chats, config, lv_value
         )
         
@@ -58,9 +60,12 @@ def load_json_file(directory, filename):
     return {}
 
 def create_timeline_blocks(transcript_data, comments_data, lv_value):
-    """タイムラインブロックを作成"""
+    """タイムラインブロックを文字起こしとコメントで分離して作成"""
     try:
-        timeline_dict = {}
+        # 文字起こし用ブロック辞書
+        transcript_blocks = {}
+        # コメント用ブロック辞書  
+        comment_blocks = {}
         
         print(f"文字起こしデータ: {len(transcript_data.get('transcripts', []))}件")
         print(f"コメントデータ: {len(comments_data.get('comments', []))}件")
@@ -71,40 +76,28 @@ def create_timeline_blocks(transcript_data, comments_data, lv_value):
             timestamp = segment.get('timestamp', 0)
             timeline_block = (timestamp // 10) * 10
             
-            if timeline_block not in timeline_dict:
-                timeline_dict[timeline_block] = {
-                    'start_seconds': timeline_block,
-                    'end_seconds': timeline_block + 10,
-                    'time_range': format_time_range(timeline_block, timeline_block + 10),
-                    'transcript': '',
-                    'center_score': 0,
-                    'positive_score': 0,
-                    'negative_score': 0,
-                    'comments': [],
-                    'screenshot_path': f"./screenshot/{lv_value}/{timeline_block}.png"
-                }
-            
-            timeline_dict[timeline_block]['transcript'] = html.escape(segment.get('text', ''))
-            timeline_dict[timeline_block]['center_score'] = round(segment.get('center_score', 0), 3)
-            timeline_dict[timeline_block]['positive_score'] = round(segment.get('positive_score', 0), 3)
-            timeline_dict[timeline_block]['negative_score'] = round(segment.get('negative_score', 0), 3)
+            transcript_blocks[timeline_block] = {
+                'start_seconds': timeline_block,
+                'end_seconds': timeline_block + 10,
+                'time_range': format_time_range(timeline_block, timeline_block + 10),
+                'transcript': html.escape(segment.get('text', '')),
+                'center_score': round(segment.get('center_score', 0), 3),
+                'positive_score': round(segment.get('positive_score', 0), 3),
+                'negative_score': round(segment.get('negative_score', 0), 3),
+                'screenshot_path': f"./screenshot/{lv_value}/{timeline_block}.png"
+            }
         
-        # コメントデータを追加
+        # コメントデータから時間ブロック作成
         comments = comments_data.get('comments', [])
         for comment in comments:
             timeline_block = comment.get('timeline_block', 0)
             
-            if timeline_block not in timeline_dict:
-                timeline_dict[timeline_block] = {
+            if timeline_block not in comment_blocks:
+                comment_blocks[timeline_block] = {
                     'start_seconds': timeline_block,
                     'end_seconds': timeline_block + 10,
                     'time_range': format_time_range(timeline_block, timeline_block + 10),
-                    'transcript': '',
-                    'center_score': 0,
-                    'positive_score': 0,
-                    'negative_score': 0,
-                    'comments': [],
-                    'screenshot_path': f"./screenshot/{lv_value}/{timeline_block}.png"
+                    'comments': []
                 }
             
             user_url = ""
@@ -120,21 +113,34 @@ def create_timeline_blocks(transcript_data, comments_data, lv_value):
                 'icon_url': f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{comment.get('user_id', '')[:4]}/{comment.get('user_id', '')}.jpg"
             }
             
-            timeline_dict[timeline_block]['comments'].append(comment_data)
+            comment_blocks[timeline_block]['comments'].append(comment_data)
         
-        # ソートして配列に変換
-        timeline_blocks = []
-        for block_time in sorted(timeline_dict.keys()):
-            block = timeline_dict[block_time]
+        # 文字起こしブロックをソートして配列に変換
+        transcript_timeline = []
+        for block_time in sorted(transcript_blocks.keys()):
+            transcript_timeline.append(transcript_blocks[block_time])
+        
+        # コメントブロックをソートして配列に変換
+        comment_timeline = []
+        for block_time in sorted(comment_blocks.keys()):
+            block = comment_blocks[block_time]
             block['comments'].sort(key=lambda x: x.get('time', ''))
-            timeline_blocks.append(block)
+            comment_timeline.append(block)
         
-        print(f"タイムラインブロック作成完了: {len(timeline_blocks)}ブロック")
-        return timeline_blocks
+        print(f"文字起こしブロック作成完了: {len(transcript_timeline)}ブロック")
+        print(f"コメントブロック作成完了: {len(comment_timeline)}ブロック")
+        
+        return {
+            'transcript_blocks': transcript_timeline,
+            'comment_blocks': comment_timeline
+        }
         
     except Exception as e:
         print(f"タイムライン作成エラー: {str(e)}")
-        return []
+        return {
+            'transcript_blocks': [],
+            'comment_blocks': []
+        }
 
 def prepare_word_ranking(broadcast_data):
     """単語ランキングデータを準備"""
@@ -153,9 +159,28 @@ def prepare_word_ranking(broadcast_data):
         return []
 
 def prepare_comment_ranking(ranking_data, account_dir, lv_value):
-    """コメントランキングデータを準備"""
+    """コメントランキングデータを準備（全コメント含む）"""
     try:
         comment_ranking = []
+        
+        # コメントファイルから全コメントデータを取得
+        comments_file = os.path.join(os.path.dirname(account_dir), lv_value, f"{lv_value}_comments.json")
+        all_comments = {}
+        if os.path.exists(comments_file):
+            with open(comments_file, 'r', encoding='utf-8') as f:
+                comments_data = json.load(f)
+            
+            # ユーザーID別にコメントをグループ化
+            for comment in comments_data.get('comments', []):
+                user_id = comment.get('user_id', '')
+                if user_id not in all_comments:
+                    all_comments[user_id] = []
+                all_comments[user_id].append({
+                    'text': html.escape(comment.get('text', '')),
+                    'time': format_seconds_to_time(comment.get('broadcast_seconds', 0)),
+                    'broadcast_seconds': comment.get('broadcast_seconds', 0)
+                })
+        
         for rank_data in ranking_data.get('ranking', []):
             user_id = rank_data.get('user_id', '')
             user_name = html.escape(rank_data.get('user_name', ''))
@@ -173,6 +198,11 @@ def prepare_comment_ranking(ranking_data, account_dir, lv_value):
             if not rank_data.get('anonymity', False) and user_id:
                 user_url = f"https://www.nicovideo.jp/user/{user_id}"
             
+            # そのユーザーの全コメントを取得
+            user_comments = all_comments.get(user_id, [])
+            # 時間順にソート
+            user_comments.sort(key=lambda x: x['broadcast_seconds'])
+            
             comment_ranking.append({
                 'rank': rank_data.get('rank', 0),
                 'user_id': user_id,
@@ -183,7 +213,8 @@ def prepare_comment_ranking(ranking_data, account_dir, lv_value):
                 'first_comment': html.escape(rank_data.get('first_comment', '')),
                 'first_comment_time': format_seconds_to_time(rank_data.get('first_comment_time', 0)),
                 'last_comment': html.escape(rank_data.get('last_comment', '')),
-                'last_comment_time': format_seconds_to_time(rank_data.get('last_comment_time', 0))
+                'last_comment_time': format_seconds_to_time(rank_data.get('last_comment_time', 0)),
+                'all_comments': user_comments  # 全コメントを追加
             })
         
         print(f"コメントランキング準備: {len(comment_ranking)}ユーザー")
@@ -191,7 +222,7 @@ def prepare_comment_ranking(ranking_data, account_dir, lv_value):
     except Exception as e:
         print(f"コメントランキング準備エラー: {str(e)}")
         return []
-
+    
 def prepare_ai_chats(broadcast_data, config):
     """AI会話データを準備"""
     try:
@@ -230,9 +261,13 @@ def prepare_ai_chats(broadcast_data, config):
         print(f"AI会話準備エラー: {str(e)}")
         return {'intro': [], 'outro': []}
 
-def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, comment_ranking, ai_chats, config, lv_value):
+def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_ranking, ai_chats, config, lv_value):
     """完全版HTMLを生成（全機能統合）"""
     try:
+        # timeline_dataから文字起こしとコメントブロックを取得
+        transcript_blocks = timeline_data['transcript_blocks']
+        comment_blocks = timeline_data['comment_blocks']
+        
         html_parts = []
         
         sentiment_stats = broadcast_data.get('sentiment_stats', {})
@@ -240,10 +275,10 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         image_data = broadcast_data.get('image_generation', {})
         
         # JavaScript用データ準備
-        segments_js = ','.join([str(block['start_seconds']) for block in timeline_blocks if block['transcript']])
-        positive_data_js = ','.join([str(block['positive_score']) for block in timeline_blocks if block['transcript']])
-        center_data_js = ','.join([str(block['center_score']) for block in timeline_blocks if block['transcript']])
-        negative_data_js = ','.join([str(block['negative_score']) for block in timeline_blocks if block['transcript']])
+        segments_js = ','.join([str(block['start_seconds']) for block in transcript_blocks])
+        positive_data_js = ','.join([str(block['positive_score']) for block in transcript_blocks])
+        center_data_js = ','.join([str(block['center_score']) for block in transcript_blocks])
+        negative_data_js = ','.join([str(block['negative_score']) for block in transcript_blocks])
         
         # HTMLヘッダー
         html_parts.append(f"""<!DOCTYPE html>
@@ -273,7 +308,6 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         .summary-image {{ text-align: center; margin: 20px 0; }}
         .summary-image img {{ max-width: 400px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }}
         
-        /* タイムライン専用スタイル */
         .container {{ display: flex; gap: 20px; margin: 20px 0; }}
         .timeline {{ flex: 1; }}
         .timeline h2 {{ text-align: center; margin-bottom: 20px; }}
@@ -319,12 +353,12 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             cursor: pointer; 
             font-size: 0.8em;
         }}
-        .img_container {{ 
+        .img_container {{
             position: absolute; 
             bottom: 5px; 
             right: 5px; 
-            width: 120px; 
-            height: 90px; 
+            width: 80px;
+            height: 60px;
         }}
         .img_container img {{ 
             width: 100%; 
@@ -360,7 +394,6 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         .comment-item:last-child {{ border-bottom: none; }}
         .flash-fade-out {{ border: 3px solid #ff6b35 !important; transition: border 1s ease-out; }}
         
-        /* プレイヤーコントロール */
         #controls-container {{
             position: fixed;
             bottom: 20px;
@@ -369,14 +402,17 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             background: white;
             border: 2px solid #007cba;
             border-radius: 10px;
-            padding: 15px;
+            padding: 10px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }}
-        #controls-container audio {{ width: 100%; margin: 10px 0; }}
-        #seekbar {{ width: 100%; margin: 10px 0; }}
+        #controls-container audio {{ flex: 1; margin: 0; }}
+        #seekbar {{ flex: 1; margin: 0; }}
+        #controls-container label, #controls-container input[type="checkbox"] {{ margin: 0; }}
         
-        /* 高さ調整ゲージ */
         #gaugeBarContainer {{
             position: fixed;
             top: 20px;
@@ -389,13 +425,26 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             z-index: 1000;
         }}
         
-        /* グラフ */
         .graph-container {{ margin: 20px 0; text-align: center; }}
         .graph-container canvas {{ max-width: 100%; height: auto; }}
+        # HTMLヘッダーのスタイル部分に追加
+        .ranking-header {{
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }}
+        .ranking-summary {{
+            margin-bottom: 10px;
+        }}
+        .toggle-comments-btn:hover {{
+            background-color: #005a8a;
+        }}
+        .comment-entry:last-child {{
+            border-bottom: none;
+        }}
     </style>
 </head>
 <body>
-    <!-- 設定データ注入 -->
     <script>
       window.NICO_ARCHIVE_CONFIG = {{
           lvValue: "{lv_value}",
@@ -415,7 +464,7 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
       }};
     </script>
 """)
-        
+
         # ヘッダー情報
         html_parts.append(f"""
     <div class="header">
@@ -439,7 +488,7 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         </div>
     </div>
 """)
-        
+
         # 開始前AI会話
         if ai_chats['intro']:
             html_parts.append("""
@@ -459,27 +508,47 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             </div>
 """)
             html_parts.append("        </div>\n    </div>\n")
-        
-        # コメントランキング
+
+        # コメントランキング（generate_complete_html関数内）
         if comment_ranking:
             html_parts.append("""
-    <div class="section">
-        <h2>🏆 コメントランキング</h2>
-        <ul class="ranking-list">
-""")
+            <div class="section">
+                <h2>🏆 コメントランキング</h2>
+                <ul class="ranking-list">
+        """)
             for user in comment_ranking:
                 user_display = f'<a href="{user["user_url"]}" target="_blank">{user["user_name"]}</a>' if user['user_url'] else user['user_name']
                 html_parts.append(f"""
-            <li class="ranking-item">
-                <strong>{user['rank']}位:</strong>
-                <img src="{user['icon_url']}" style="width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; margin: 0 5px;" onerror="this.style.display='none'">
-                {user_display} - {user['comment_count']}コメント<br>
-                <small>初コメント ({user['first_comment_time']}): {user['first_comment']}</small><br>
-                <small>最終コメント ({user['last_comment_time']}): {user['last_comment']}</small>
-            </li>
-""")
-            html_parts.append("        </ul>\n    </div>\n")
-        
+                    <li class="ranking-item">
+                        <div class="ranking-header">
+                            <strong>{user['rank']}位:</strong>
+                            <img src="{user['icon_url']}" style="width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; margin: 0 5px;" onerror="this.style.display='none'">
+                            {user_display} - {user['comment_count']}コメント
+                            <button class="toggle-comments-btn" data-user-id="{user['user_id']}" style="margin-left: 10px; padding: 3px 8px; background: #007cba; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8em;">
+                                全コメント表示
+                            </button>
+                        </div>
+                        <div class="ranking-summary">
+                            <small>初コメント ({user['first_comment_time']}): {user['first_comment']}</small><br>
+                            <small>最終コメント ({user['last_comment_time']}): {user['last_comment']}</small>
+                        </div>
+                        <div class="user-comments" id="comments-{user['user_id']}" style="display: none; margin-top: 10px; max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+        """)
+            # 全コメントを表示
+            for comment in user['all_comments']:
+                html_parts.append(f"""
+                        <div class="comment-entry" style="margin: 5px 0; padding: 5px; border-bottom: 1px dotted #ccc;">
+                            <span style="color: #666; font-size: 0.8em;">[{comment['time']}]</span>
+                            <span style="margin-left: 5px;">{comment['text']}</span>
+                        </div>
+    """)
+            
+            html_parts.append("""
+                    </div>
+                </li>
+    """)
+        html_parts.append("        </ul>\n    </div>\n")
+
         # 要約セクション
         html_parts.append(f"""
     <div class="summary-section">
@@ -491,18 +560,28 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
            ネガティブ: {round(sentiment_stats.get('avg_negative', 0), 3)}
         </p>
 """)
-        
-        # AI音楽
-        if music_data.get('songs') and music_data['songs'][0].get('primary_url'):
-            html_parts.append(f"""
-        <div class="audio-player">
-            <h3>要約を歌詞とした音楽</h3>
-            <audio controls style="width: 100%;">
-                <source src="{music_data['songs'][0]['primary_url']}" type="audio/mp3">
-            </audio>
-        </div>
-""")
-        
+
+        # AI音楽（複数曲対応）
+        if music_data.get('songs'):
+            html_parts.append("""
+                <div class="audio-player">
+                    <h3>要約を歌詞とした音楽</h3>
+        """)
+            
+            for i, song in enumerate(music_data['songs']):
+                if song.get('primary_url'):
+                    song_title = f"楽曲 {i+1}"
+                    html_parts.append(f"""
+                    <div style="margin: 10px 0;">
+                        <h4>{song_title}</h4>
+                        <audio controls style="width: 100%;">
+                            <source src="{song['primary_url']}" type="audio/mp3">
+                        </audio>
+                    </div>
+        """)
+            
+            html_parts.append("        </div>\n")
+
         # 要約画像
         if image_data.get('imgur_url'):
             html_parts.append(f"""
@@ -512,7 +591,7 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             </a>
         </div>
 """)
-        
+
         # 感情分析グラフ
         html_parts.append("""
         <div class="emotion-chart-card">
@@ -520,9 +599,8 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             <div class="graph-container"></div>
         </div>
 """)
-        
         html_parts.append("    </div>\n")
-        
+
         # 単語ランキング
         if word_ranking:
             html_parts.append("""
@@ -537,7 +615,7 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             </span>
 """)
             html_parts.append("        </div>\n    </div>\n")
-        
+
         # 高さ調整ゲージ
         html_parts.append("""
     <div id="gaugeBarContainer">
@@ -545,7 +623,7 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         <input id="gaugeBar" max="800" min="100" type="range" value="180" />
     </div>
 """)
-        
+
         # 横並びタイムライン
         html_parts.append("""
     <div class="container">
@@ -553,11 +631,10 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         <div class="timeline" id="timeline1">
             <h2>放送者文字おこしのタイムライン</h2>
 """)
-        
+
         # 文字起こしタイムライン
-        for block in timeline_blocks:
-            if block['transcript']:
-                html_parts.append(f"""
+        for block in transcript_blocks:
+            html_parts.append(f"""
             <div class="time-block" id="time_block_{block['start_seconds']}" style="position: relative; height: 180px;">
                 <strong>{block['time_range']}</strong>
                 <div>
@@ -577,7 +654,7 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
                 </div>
             </div>
 """)
-        
+
         html_parts.append("""
         </div>
         
@@ -585,36 +662,53 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         <div class="timeline" id="timeline2">
             <h2>コメントのタイムライン</h2>
 """)
-        
-        # コメントタイムライン
-        for block in timeline_blocks:
-            if block['comments']:
-                html_parts.append(f"""
-            <div class="time-block" id="time_block_{block['start_seconds']}" style="height: 180px;">
-                <strong>{block['time_range']}</strong>
-                <div class="comment-list">
-""")
-                
-                for comment in block['comments']:
+
+        # コメントタイムライン - 全時間範囲をカバー
+        # まず全時間ブロックを取得
+        all_time_blocks = set()
+        for block in transcript_blocks:
+            all_time_blocks.add(block['start_seconds'])
+        for block in comment_blocks:
+            all_time_blocks.add(block['start_seconds'])
+
+        # 全時間ブロックに対してコメントブロックを表示
+        for time_second in sorted(all_time_blocks):
+            # その時間にコメントがあるかチェック
+            comment_block = next((b for b in comment_blocks if b['start_seconds'] == time_second), None)
+            
+            html_parts.append(f"""
+                    <div class="time-block" id="time_block_{time_second}" style="height: 180px;">
+                        <strong>{format_time_range(time_second, time_second + 10)}</strong>
+                        <div class="comment-list">
+        """)
+            
+            if comment_block:
+                # コメントがある場合
+                for comment in comment_block['comments']:
                     user_display = f'<a href="{comment["user_url"]}" target="_blank">{comment["user_name"]}</a>' if comment['user_url'] else comment['user_name']
                     html_parts.append(f"""
-                    <p class="comment-item">
-                        {comment['index']} | {comment['time']} - {user_display} :
-                        <img src="{comment['icon_url']}" style="width: 20px; height: 20px; vertical-align: middle; margin-left: 5px;" onerror="this.style.display='none'">
-                        {comment['text']}<br>
-                    </p>
-""")
-                
+                            <p class="comment-item">
+                                {comment['index']} | {comment['time']} - {user_display} :
+                                <img src="{comment['icon_url']}" style="width: 20px; height: 20px; vertical-align: middle; margin-left: 5px;" onerror="this.style.display='none'">
+                                {comment['text']}<br>
+                            </p>
+        """)
+            else:
+                # コメントがない場合
                 html_parts.append("""
+                            <p style="color: #999; font-style: italic; text-align: center; margin-top: 50px;">コメントなし</p>
+        """)
+            
+            html_parts.append("""
+                        </div>
+                    </div>
+        """)
+
+        html_parts.append("""
                 </div>
             </div>
-""")
-        
-        html_parts.append("""
-        </div>
-    </div>
-""")
-        
+        """)
+
         # 終了後AI会話
         if ai_chats['outro']:
             html_parts.append("""
@@ -630,11 +724,11 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
                 <div class="chat-bubble">
                     <strong>{chat['name']}:</strong><br>
                     {chat['dialogue']}
-</div>
+                </div>
             </div>
 """)
             html_parts.append("        </div>\n    </div>\n")
-        
+
         # プレイヤーコントロール
         html_parts.append(f"""
     <div id="controls-container">
@@ -645,9 +739,11 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
             Your browser does not support the audio element.
         </audio>
         <input id="seekbar" max="{int(broadcast_data.get('video_duration', 0))}" min="0" step="1" type="range" value="0" />
+        <label for="gaugeBar">高さ:</label>
+        <input id="gaugeBar" max="800" min="100" type="range" value="180" style="width: 100px;" />
     </div>
 """)
-        
+
         # メタデータ
         html_parts.append(f"""
     <div class="section">
@@ -662,10 +758,10 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
         </ul>
     </div>
 """)
-        
-        # JavaScript統合
+
+        # JavaScript
+        # JavaScript
         html_parts.append(f"""
-    <!-- JavaScript読み込み -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4"></script>
     <script>
     document.addEventListener("DOMContentLoaded", function () {{
@@ -721,6 +817,24 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
                 const videoSecond = timeBlock.id.replace('time_block_', '');
                 const jumpUrl = 'https://live.nicovideo.jp/watch/{lv_value}#' + videoSecond;
                 window.open(jumpUrl, '_blank');
+            }});
+        }});
+        
+        // コメント表示/非表示トグル機能
+        document.querySelectorAll('.toggle-comments-btn').forEach(button => {{
+            button.addEventListener('click', function() {{
+                const userId = this.dataset.userId;
+                const commentsDiv = document.getElementById('comments-' + userId);
+                
+                if (commentsDiv.style.display === 'none') {{
+                    commentsDiv.style.display = 'block';
+                    this.textContent = '全コメント非表示';
+                    this.style.backgroundColor = '#dc3545';
+                }} else {{
+                    commentsDiv.style.display = 'none';
+                    this.textContent = '全コメント表示';
+                    this.style.backgroundColor = '#007cba';
+                }}
             }});
         }});
         
@@ -903,7 +1017,6 @@ def generate_complete_html(timeline_blocks, broadcast_data, word_ranking, commen
     </script>
 </body>
 </html>""")
-        
         return ''.join(html_parts)
         
     except Exception as e:
