@@ -38,7 +38,8 @@ def should_run_step(config, step_name):
         'step09_conversation_generator': True,
         'step10_screenshot_generator': config['display_features'].get('enable_thumbnails', True),
         'step11_comment_processor': True,
-        'step12_html_generator': True
+        'step12_html_generator': True,
+        'step13_index_generator': True
     }
     return step_mapping.get(step_name, True)
 
@@ -78,7 +79,8 @@ def run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_val
             'step09_conversation_generator',
             'step10_screenshot_generator',
             'step11_comment_processor',
-            'step12_html_generator'
+            'step12_html_generator',
+            'step13_index_generator'
         ]
         
         for step_name in steps:
