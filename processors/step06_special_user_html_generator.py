@@ -475,7 +475,8 @@ def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir,
         template = f.read()
     
     # コメント行を生成
-    comment_rows = generate_comment_rows(user_data['comments'])
+    start_time = int(broadcast_data.get('start_time', 0))  # 開始時間取得
+    comment_rows = generate_comment_rows(user_data['comments'], start_time)  # 引数追加
     
     # 分析テキストを生成（詳細設定を考慮）
     if config:
@@ -511,12 +512,14 @@ def get_user_icon_path(user_id):
         return f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{path_prefix}/{user_id}.jpg"
 
 
-def generate_comment_rows(comments):
+def generate_comment_rows(comments, start_time):
     """コメントテーブルの行を生成"""
     rows = []
     for i, comment in enumerate(comments, 1):
-        vpos = int(comment.get('vpos', 0))
-        time_str = format_vpos_to_time(vpos)
+        # dateから正確な時間を計算
+        comment_date = int(comment.get('date', 0))
+        broadcast_seconds = comment_date - start_time  # 差分計算
+        time_str = format_seconds_to_time(broadcast_seconds)
         date_str = format_unix_time(comment.get('date', ''))
         
         row = f'''
@@ -580,7 +583,7 @@ def generate_broadcast_items(user_data, broadcast_data, lv_value):
                         </tr>
                     </thead>
                     <tbody>
-                        {generate_comment_rows(user_data['comments'])}
+                        {generate_comment_rows(user_data['comments'], int(broadcast_data.get('start_time', 0)))}
                     </tbody>
                 </table>
             </div>
@@ -593,13 +596,24 @@ def generate_broadcast_items(user_data, broadcast_data, lv_value):
     
     return item
 
-def format_vpos_to_time(vpos):
-    """vpos（1/100秒単位）を時間表記に変換"""
-    seconds = vpos // 100
-    minutes = seconds // 60
-    hours = minutes // 60
+# def format_vpos_to_time(vpos):
+#     """vpos（1/100秒単位）を時間表記に変換"""
+#     seconds = vpos // 100
+#     minutes = seconds // 60
+#     hours = minutes // 60
     
-    return f"{hours:02d}:{minutes%60:02d}:{seconds%60:02d}"
+#     return f"{hours:02d}:{minutes%60:02d}:{seconds%60:02d}"
+
+def format_seconds_to_time(seconds):
+    """秒数を時間表記に変換"""
+    try:
+        seconds = int(seconds)
+        minutes = seconds // 60
+        hours = minutes // 60
+        return f"{hours:02d}:{minutes%60:02d}:{seconds%60:02d}"
+    except:
+        return "00:00:00"
+
 
 def format_unix_time(unix_time_str):
     """UNIX時間を日時表記に変換"""
