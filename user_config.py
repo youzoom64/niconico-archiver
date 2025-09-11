@@ -109,16 +109,21 @@ class UserConfigWindow:
         api_frame = tk.LabelFrame(scrollable_frame, text="API設定")
         api_frame.pack(fill=tk.X, pady=5)
 
-        # AIモデル選択
+        # 要約AIモデル選択
         tk.Label(api_frame, text="要約AIモデル:").pack(anchor=tk.W)
-        self.ai_model_var = tk.StringVar(value="openai-gpt4o")
-        model_frame = tk.Frame(api_frame)
-        model_frame.pack(fill=tk.X, padx=5, pady=2)
+        self.summary_ai_model_var = tk.StringVar(value="openai-gpt4o")
+        summary_model_combo = ttk.Combobox(api_frame, textvariable=self.summary_ai_model_var, 
+                                        values=["openai-gpt4o", "google-gemini-2.5-flash"], 
+                                        state="readonly", width=30)
+        summary_model_combo.pack(fill=tk.X, padx=5, pady=2)
 
-        model_combo = ttk.Combobox(model_frame, textvariable=self.ai_model_var, 
-                                values=["openai-gpt4o", "google-gemini-2.5-flash"], 
-                                state="readonly", width=30)
-        model_combo.pack(side=tk.LEFT)
+        # 会話AIモデル選択
+        tk.Label(api_frame, text="会話AIモデル:").pack(anchor=tk.W, pady=(10, 0))
+        self.conversation_ai_model_var = tk.StringVar(value="google-gemini-2.5-flash")
+        conversation_model_combo = ttk.Combobox(api_frame, textvariable=self.conversation_ai_model_var, 
+                                            values=["openai-gpt4o", "google-gemini-2.5-flash"], 
+                                            state="readonly", width=30)
+        conversation_model_combo.pack(fill=tk.X, padx=5, pady=2)
 
         # OpenAI API Key
         tk.Label(api_frame, text="OpenAI API Key:").pack(anchor=tk.W, pady=(10, 0))
@@ -316,11 +321,14 @@ class UserConfigWindow:
             
             # API設定
             api_settings = config.get("api_settings", {})
-            self.ai_model_var.set(config["api_settings"].get("ai_model", "openai-gpt4o"))
-            self.openai_api_key_var.set(config["api_settings"].get("openai_api_key", ""))
-            self.google_api_key_var.set(config["api_settings"].get("google_api_key", ""))
-            self.suno_api_key_var.set(config["api_settings"].get("suno_api_key", ""))
-            self.imgur_api_key_var.set(config["api_settings"].get("imgur_api_key", ""))  # 追加
+            # 後方互換性のため、古い設定も確認
+            old_ai_model = api_settings.get("ai_model", "openai-gpt4o")
+            self.summary_ai_model_var.set(api_settings.get("summary_ai_model", old_ai_model))
+            self.conversation_ai_model_var.set(api_settings.get("conversation_ai_model", old_ai_model))
+            self.openai_api_key_var.set(api_settings.get("openai_api_key", ""))
+            self.google_api_key_var.set(api_settings.get("google_api_key", ""))
+            self.suno_api_key_var.set(api_settings.get("suno_api_key", ""))
+            self.imgur_api_key_var.set(api_settings.get("imgur_api_key", ""))
             
             # 音声処理設定
             audio_settings = config.get("audio_settings", {})
@@ -447,17 +455,18 @@ class UserConfigWindow:
                 "ncv_directory": self.ncv_dir_var.get()
             },
             "api_settings": {
-                "ai_model": self.ai_model_var.get(),
+                "summary_ai_model": self.summary_ai_model_var.get(),
+                "conversation_ai_model": self.conversation_ai_model_var.get(),
                 "openai_api_key": self.openai_api_key_var.get(),
                 "google_api_key": self.google_api_key_var.get(),
                 "suno_api_key": self.suno_api_key_var.get(),
-                "imgur_api_key": self.imgur_api_key_var.get()  # 追加
+                "imgur_api_key": self.imgur_api_key_var.get()
             },
             "audio_settings": {
-            "use_gpu": self.use_gpu_var.get(),
-            "whisper_model": self.whisper_model_var.get(),
-            "cpu_threads": self.cpu_threads_var.get(),
-            "beam_size": self.beam_size_var.get()
+                "use_gpu": self.use_gpu_var.get(),
+                "whisper_model": self.whisper_model_var.get(),
+                "cpu_threads": self.cpu_threads_var.get(),
+                "beam_size": self.beam_size_var.get()
             },
             "ai_features": {
                 "enable_summary_text": self.summary_text_var.get(),

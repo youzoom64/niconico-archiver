@@ -26,8 +26,8 @@ def process(pipeline_data):
         broadcast_dir = os.path.join(account_dir, lv_value)
         os.makedirs(broadcast_dir, exist_ok=True)
 
-        # 2. 元URLのHTML取得・保存
-        fetch_and_save_html(lv_value, broadcast_dir)  # 戻り値を無視
+        # 2. 元URLのHTML取得・保存とbeginTime抽出
+        html_content, begin_time = fetch_and_save_html(lv_value, broadcast_dir)
         
         # 3. NCVのXMLファイル監視・解析
         ncv_xml_path, ncv_data = wait_and_parse_ncv_xml(ncv_directory, lv_value)
@@ -41,9 +41,9 @@ def process(pipeline_data):
         # 6. 前回放送の要約文取得
         previous_summary = get_previous_broadcast_summary(platform_directory, account_id, lv_value)
         
-        # 7. 統合JSON作成
+        # 7. 統合JSON作成（beginTimeを追加）
         broadcast_data = create_broadcast_json(
-            lv_value, ncv_data, server_time, video_duration, 
+            lv_value, ncv_data, server_time, begin_time, video_duration, 
             previous_summary, broadcast_dir, ncv_xml_path, platform_xml_path, account_dir
         )
         
@@ -53,9 +53,9 @@ def process(pipeline_data):
     except Exception as e:
         print(f"Step01 エラー: {str(e)}")
         raise
-    
+
 def fetch_and_save_html(lv_value, broadcast_dir):
-    """元URLのHTML取得・保存"""
+    """元URLのHTML取得・保存とbeginTime抽出"""
     try:
         url = f"https://live.nicovideo.jp/watch/{lv_value}"
         headers = {
@@ -65,15 +65,47 @@ def fetch_and_save_html(lv_value, broadcast_dir):
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         
+        html_content = response.text
+        
+        # HTMLを保存
         html_path = os.path.join(broadcast_dir, f"{lv_value}.html")
         with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(response.text)
+            f.write(html_content)
+        
+        # beginTimeを抽出
+        begin_time = extract_begin_time(html_content)
         
         print(f"HTML保存完了: {html_path}")
-        return response.text
+        if begin_time:
+            print(f"beginTime抽出: {begin_time}")
+            
+        return html_content, begin_time
         
     except Exception as e:
         print(f"HTML取得エラー: {str(e)}")
+        return None, None
+
+def extract_begin_time(html_content):
+    """HTMLからbeginTimeを抽出"""
+    try:
+        import re
+        # beginTime&quot;:数字 のパターンを検索
+        pattern = r'beginTime&quot;:(\d+)'
+        match = re.search(pattern, html_content)
+        
+        if match:
+            return int(match.group(1))
+        else:
+            # 別のパターンも試す
+            pattern2 = r'"beginTime":(\d+)'
+            match2 = re.search(pattern2, html_content)
+            if match2:
+                return int(match2.group(1))
+            
+        return None
+        
+    except Exception as e:
+        print(f"beginTime抽出エラー: {str(e)}")
         return None
 
 def wait_and_parse_ncv_xml(ncv_directory, lv_value):
@@ -149,9 +181,25 @@ def parse_ncv_xml(xml_path):
         live_info = root.find('.//LiveInfo', ns) or root.find('.//LiveInfo')
         player_status = root.find('.//PlayerStatus', ns) or root.find('.//PlayerStatus')
         
+        # elapsed_timeを取得、空の場合は計算する
+        elapsed_time = get_text_content(root, './/ElapsedTime')
+        if not elapsed_time:
+            # ElapsedTimeが取得できない場合、StartTimeとEndTimeから計算
+            start_time = get_text_content(live_info, './/StartTime')
+            end_time = get_text_content(live_info, './/EndTime')
+            if start_time and end_time:
+                try:
+                    duration_seconds = int(end_time) - int(start_time)
+                    hours = duration_seconds // 3600
+                    minutes = (duration_seconds % 3600) // 60
+                    seconds = duration_seconds % 60
+                    elapsed_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                except ValueError:
+                    elapsed_time = "不明"
+        
         data = {
             'live_num': get_text_content(root, './/LiveNum'),
-            'elapsed_time': get_text_content(root, './/ElapsedTime'),
+            'elapsed_time': elapsed_time,
             'live_title': get_text_content(live_info, './/LiveTitle'),
             'broadcaster': get_text_content(live_info, './/Broadcaster'),
             'default_community': get_text_content(live_info, './/DefaultCommunity'),
@@ -241,16 +289,17 @@ def get_previous_broadcast_summary(platform_directory, account_id, current_lv_va
         print(f"前回放送要約取得エラー: {str(e)}")
         return ""
 
-def create_broadcast_json(lv_value, ncv_data, server_time, video_duration, previous_summary, broadcast_dir, ncv_xml_path, platform_xml_path, account_dir_path):
+def create_broadcast_json(lv_value, ncv_data, server_time, begin_time, video_duration, previous_summary, broadcast_dir, ncv_xml_path, platform_xml_path, account_dir_path):
     """統合JSON作成"""
     
     # open_timeとserver_timeの差を計算
     time_diff_seconds = calculate_time_difference(ncv_data.get('open_time', ''), server_time)
-    
+   
     broadcast_data = {
         'lv_value': lv_value,
         'timestamp': datetime.now().isoformat(),
         'server_time': server_time,
+        'begin_time': begin_time,  # beginTimeを追加
         'video_duration': video_duration,
         'time_diff_seconds': time_diff_seconds,
         

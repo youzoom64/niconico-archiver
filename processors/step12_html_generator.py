@@ -229,30 +229,36 @@ def prepare_ai_chats(broadcast_data, config):
         ai_prompts = config.get('ai_prompts', {})
         char1_name = ai_prompts.get('character1_name', 'ニニちゃん')
         char1_image = ai_prompts.get('character1_image_url', '')
+        char1_flip = ai_prompts.get('character1_image_flip', False)
         char2_name = ai_prompts.get('character2_name', 'ココちゃん')
         char2_image = ai_prompts.get('character2_image_url', '')
+        char2_flip = ai_prompts.get('character2_image_flip', False)
         
-        def get_character_icon(name):
+        def get_character_info(name):
             if name == char1_name:
-                return char1_image
+                return {'icon': char1_image, 'flip': char1_flip}
             elif name == char2_name:
-                return char2_image
-            return ''
+                return {'icon': char2_image, 'flip': char2_flip}
+            return {'icon': '', 'flip': False}
         
         intro_chat = []
         for chat in broadcast_data.get('intro_chat', []):
+            char_info = get_character_info(chat.get('name', ''))
             intro_chat.append({
                 'name': html.escape(chat.get('name', '')),
                 'dialogue': html.escape(chat.get('dialogue', '')),
-                'icon': get_character_icon(chat.get('name', ''))
+                'icon': char_info['icon'],
+                'flip': char_info['flip']
             })
         
         outro_chat = []
         for chat in broadcast_data.get('outro_chat', []):
+            char_info = get_character_info(chat.get('name', ''))
             outro_chat.append({
                 'name': html.escape(chat.get('name', '')),
                 'dialogue': html.escape(chat.get('dialogue', '')),
-                'icon': get_character_icon(chat.get('name', ''))
+                'icon': char_info['icon'],
+                'flip': char_info['flip']
             })
         
         print(f"AI会話準備: 開始前{len(intro_chat)}件, 終了後{len(outro_chat)}件")
@@ -260,6 +266,7 @@ def prepare_ai_chats(broadcast_data, config):
     except Exception as e:
         print(f"AI会話準備エラー: {str(e)}")
         return {'intro': [], 'outro': []}
+        
 
 def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_ranking, ai_chats, config, lv_value):
     """完全版HTMLを生成（全機能統合）"""
@@ -295,15 +302,47 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         .stat-item {{ background: white; padding: 10px; border-radius: 3px; border-left: 3px solid #007cba; flex: 1; min-width: 150px; }}
         .section {{ margin: 30px 0; padding: 20px; background: #fafafa; border-radius: 5px; }}
         .section h2 {{ color: #333; border-bottom: 2px solid #007cba; padding-bottom: 10px; }}
-        .chat-container {{ margin: 20px 0; }}
-        .chat-message {{ display: flex; margin: 15px 0; align-items: flex-start; gap: 10px; }}
+        .chat-container {{
+            margin: 20px auto; 
+            max-width: 800px; 
+            padding: 0 20px; 
+        }}
+
+        .chat-message {{ 
+            display: flex; 
+            margin: 15px 0; 
+            align-items: flex-start; 
+            gap: 10px; 
+            max-width: 600px; 
+            margin-left: auto; 
+            margin-right: auto; 
+        }}
+
+        /* スマホ対応 */
+        @media (max-width: 768px) {{
+            .chat-container {{
+                max-width: 100%;
+                padding: 0 10px;
+            }}
+            
+            .chat-message {{
+                max-width: 100%;
+            }}
+        }}
         .chat-avatar {{ width: 50px; height: 50px; border-radius: 50%; }}
         .chat-bubble {{ background: #e3f2fd; padding: 10px 15px; border-radius: 15px; max-width: 70%; }}
         .ranking-list {{ list-style: none; padding: 0; }}
         .ranking-item {{ background: white; margin: 10px 0; padding: 15px; border-radius: 5px; border-left: 4px solid #007cba; }}
         .word-list {{ display: flex; flex-wrap: wrap; gap: 10px; }}
         .word-item {{ background: #007cba; color: white; padding: 5px 10px; border-radius: 15px; }}
-        .summary-section {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; }}
+        .summary-section {{
+            background: white;                    /* 背景色を白に設定 */
+            color: #333;                         /* 文字色を濃いグレーに設定 */
+            padding: 30px;                       /* 内側の余白を上下左右30px */
+            border-radius: 10px;                 /* 角を10px丸める */
+            border: 1px solid #ddd;              /* 1px幅の薄いグレーの枠線 */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* 軽い影をつける（右に0px、下に2px、ぼかし4px、10%透明の黒） */
+        }}
         .audio-player {{ margin: 20px 0; }}
         .summary-image {{ text-align: center; margin: 20px 0; }}
         .summary-image img {{ max-width: 400px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }}
@@ -442,6 +481,20 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         .comment-entry:last-child {{
             border-bottom: none;
         }}
+        .flip-horizontal {{
+        transform: scaleX(-1);
+        }}
+        .char1-bubble {{
+            background: #e3f2fd; /* 青系 */
+            border-left: 3px solid #2196f3;
+        }}
+        .char2-bubble {{
+            background: #fce4ec; /* 薄いピンク */
+            border-left: 3px solid #e91e63;
+        }}
+        .flip-horizontal {{
+            transform: scaleX(-1);
+        }}
     </style>
 </head>
 <body>
@@ -492,22 +545,35 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         # 開始前AI会話
         if ai_chats['intro']:
             html_parts.append("""
-    <div class="section">
-        <h2>開始前会話</h2>
-        <div class="chat-container">
-""")
+        <div class="section">
+            <h2>開始前会話</h2>
+            <div class="chat-container">
+        """)
+            char1_name = config.get('ai_prompts', {}).get('character1_name', 'ニニちゃん')
+            char2_name = config.get('ai_prompts', {}).get('character2_name', 'ココちゃん')
+            
             for i, chat in enumerate(ai_chats['intro']):
                 side = 'left' if i % 2 == 0 else 'right'
+                flip_class = ' flip-horizontal' if chat.get('flip', False) else ''
+                
+                # キャラクターごとに異なるCSSクラスを適用
+                if chat['name'] == char1_name:
+                    bubble_class = 'chat-bubble char1-bubble'
+                elif chat['name'] == char2_name:
+                    bubble_class = 'chat-bubble char2-bubble'
+                else:
+                    bubble_class = 'chat-bubble'
+                    
                 html_parts.append(f"""
-            <div class="chat-message" style="flex-direction: {'row' if side == 'left' else 'row-reverse'};">
-                <img src="{chat['icon']}" alt="{chat['name']}" class="chat-avatar" onerror="this.style.display='none'">
-                <div class="chat-bubble">
-                    <strong>{chat['name']}:</strong><br>
-                    {chat['dialogue']}
+                <div class="chat-message" style="flex-direction: {'row' if side == 'left' else 'row-reverse'};">
+                    <img src="{chat['icon']}" alt="{chat['name']}" class="chat-avatar{flip_class}" onerror="this.style.display='none'">
+                    <div class="{bubble_class}">
+                        <strong>{chat['name']}:</strong><br>
+                        {chat['dialogue']}
+                    </div>
                 </div>
-            </div>
-""")
-            html_parts.append("        </div>\n    </div>\n")
+        """)
+            html_parts.append("    </div>\n</div>\n")
 
         # コメントランキング（generate_complete_html関数内）
         if comment_ranking:
@@ -586,6 +652,7 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         if image_data.get('imgur_url'):
             html_parts.append(f"""
         <div class="summary-image">
+            <h3>要約を元に生成した画像</h3>
             <a href="{image_data['imgur_url']}" target="_blank">
                 <img src="{image_data['imgur_url']}" alt="配信の抽象化イメージ">
             </a>
@@ -712,22 +779,32 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         # 終了後AI会話
         if ai_chats['outro']:
             html_parts.append("""
-    <div class="section">
-        <h2>終了後会話</h2>
-        <div class="chat-container">
-""")
+        <div class="section">
+            <h2>終了後会話</h2>
+            <div class="chat-container">
+        """)
             for i, chat in enumerate(ai_chats['outro']):
                 side = 'left' if i % 2 == 0 else 'right'
+                flip_class = ' flip-horizontal' if chat.get('flip', False) else ''
+                
+                # キャラクターごとに異なるCSSクラスを適用
+                if chat['name'] == char1_name:
+                    bubble_class = 'chat-bubble char1-bubble'
+                elif chat['name'] == char2_name:
+                    bubble_class = 'chat-bubble char2-bubble'
+                else:
+                    bubble_class = 'chat-bubble'
+                    
                 html_parts.append(f"""
-            <div class="chat-message" style="flex-direction: {'row' if side == 'left' else 'row-reverse'};">
-                <img src="{chat['icon']}" alt="{chat['name']}" class="chat-avatar" onerror="this.style.display='none'">
-                <div class="chat-bubble">
-                    <strong>{chat['name']}:</strong><br>
-                    {chat['dialogue']}
+                <div class="chat-message" style="flex-direction: {'row' if side == 'left' else 'row-reverse'};">
+                    <img src="{chat['icon']}" alt="{chat['name']}" class="chat-avatar{flip_class}" onerror="this.style.display='none'">
+                    <div class="{bubble_class}">
+                        <strong>{chat['name']}:</strong><br>
+                        {chat['dialogue']}
+                    </div>
                 </div>
-            </div>
-""")
-            html_parts.append("        </div>\n    </div>\n")
+        """)
+            html_parts.append("    </div>\n</div>\n")
 
         # プレイヤーコントロール
         html_parts.append(f"""

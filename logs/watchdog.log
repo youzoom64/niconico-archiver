@@ -384,3 +384,32 @@
 2025-09-11 17:26:19 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-11 17:26:19 - INFO - [123] 自動監視開始
 2025-09-11 17:29:54 - INFO - [123] 監視停止
+2025-09-11 17:36:02 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:36:02 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:36:02 - INFO - [123] 自動監視開始
+2025-09-11 17:53:03 - INFO - [123] 監視停止
+2025-09-11 17:53:07 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:53:07 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:53:07 - INFO - [123] 自動監視開始
+2025-09-11 17:55:05 - INFO - [123] 監視停止
+2025-09-11 17:55:08 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:55:08 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:55:08 - INFO - [123] 自動監視開始
+2025-09-11 17:56:25 - INFO - [123] 監視停止
+2025-09-11 17:56:48 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:56:48 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:56:48 - INFO - [123] 自動監視開始
+2025-09-11 17:57:22 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:57:22 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 17:57:22 - INFO - [123] 自動監視開始
+2025-09-11 18:08:55 - INFO - [123] 監視停止
+2025-09-11 18:08:58 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 18:08:58 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 18:08:58 - INFO - [123] 自動監視開始
+2025-09-11 18:14:37 - INFO - [123] パイプライン処理完了: lv123456
+2025-09-11 18:28:24 - INFO - [123] 監視停止
+2025-09-11 18:28:40 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 18:28:40 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 18:28:40 - INFO - [123] 自動監視開始
+2025-09-11 18:31:03 - INFO - [123] パイプライン処理完了: lv123456
+2025-09-11 19:35:44 - INFO - [123] 監視停止

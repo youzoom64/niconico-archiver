@@ -27,8 +27,9 @@ def process(pipeline_data):
         # 3. 統合JSONファイル読み込み
         broadcast_data = load_broadcast_data(broadcast_dir, lv_value)
         
-        # 4. API設定確認
-        ai_model = config["api_settings"]["ai_model"]
+        # 4. API設定確認（会話専用モデルを使用）
+        ai_model = config["api_settings"].get("conversation_ai_model", config["api_settings"].get("ai_model", "openai-gpt4o"))
+        
         if ai_model == "openai-gpt4o":
             api_key = config["api_settings"].get("openai_api_key", "")
             if not api_key:
@@ -121,7 +122,9 @@ def generate_intro_conversation(broadcast_data, config, ai_model):
 
 今回の放送タイトル: {live_title}
 
-上記の情報を元に、{broadcaster}さんの前回の放送を振り返りつつ、今回の放送への期待を語る会話を作成してください。"""
+上記の情報を元に、{broadcaster}さんの前回の放送を振り返りつつ、今回の放送への期待を語る会話を作成してください。
+
+【重要】会話は必ず{char1_name}から開始してください。"""
         else:
             # 初回放送の場合
             user_prompt = f"""{intro_prompt}
@@ -130,7 +133,9 @@ def generate_intro_conversation(broadcast_data, config, ai_model):
 
 今回の放送タイトル: {live_title}
 
-これが{broadcaster}さんの初回の配信です。初めての配信への期待や緊張感を込めた会話を作成してください。"""
+これが{broadcaster}さんの初回の配信です。初めての配信への期待や緊張感を込めた会話を作成してください。
+
+【重要】会話は必ず{char1_name}から開始してください。"""
         
         # AI呼び出し
         conversation = call_ai_api(system_prompt, user_prompt, config, ai_model)

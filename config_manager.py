@@ -111,6 +111,8 @@ class ConfigManager:
                 "ncv_directory": "ncv"
             },
             "api_settings": {
+                "summary_ai_model": "openai-gpt4o",        # 追加
+                "conversation_ai_model": "google-gemini-2.5-flash",  # 追加
                 "ai_model": "openai-gpt4o",
                 "openai_api_key": "",
                 "google_api_key": "",
@@ -136,8 +138,12 @@ class ConfigManager:
                 "image_prompt": "この配信の抽象的なイメージを生成してください:",
                 "character1_name": "ニニちゃん",
                 "character1_personality": "ボケ役で標準語を話す明るい女の子",
+                "character1_image_url": "",           # 追加
+                "character1_image_flip": False,       # 追加
                 "character2_name": "ココちゃん",
                 "character2_personality": "ツッコミ役で関西弁を話すしっかり者の女の子",
+                "character2_image_url": "",           # 追加
+                "character2_image_flip": False,       # 追加
                 "conversation_turns": 5
             },
             "display_features": {
