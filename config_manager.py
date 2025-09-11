@@ -89,16 +89,129 @@ class ConfigManager:
         config_path = os.path.join(self.users_dir, f"{account_id}.json")
         
         if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    loaded_config = json.load(f)
+                
+                # デフォルト設定テンプレートを取得
+                default_config = self.get_default_config_template()
                 
                 # 古い設定ファイルとの互換性を保つため、不足項目を補完
-                default_config = self.get_default_config_template()
-                self._merge_config(default_config, config)
-                return default_config
+                merged_config = self._merge_config_deep(default_config, loaded_config)
+                
+                # special_users_configが存在しない場合は初期化
+                if "special_users_config" not in merged_config:
+                    merged_config["special_users_config"] = {
+                        "default_analysis_enabled": True,
+                        "default_analysis_ai_model": "openai-gpt4o",
+                        "default_analysis_prompt": "以下のユーザーのコメント履歴を分析して、このユーザーの特徴、傾向、配信との関わり方について詳しく分析してください。\n\n分析観点：\n- コメントの頻度と投稿タイミング\n- コメント内容の傾向（質問、感想、ツッコミなど）\n- 配信者との関係性\n- 他の視聴者との関わり\n- このユーザーの配信に対する貢献度\n- 特徴的な発言や行動パターン",
+                        "default_template": "user_detail.html",
+                        "users": {}
+                    }
+                
+                # usersセクションが存在しない場合は初期化
+                if "users" not in merged_config["special_users_config"]:
+                    merged_config["special_users_config"]["users"] = {}
+                
+                # 各APIキーの存在チェックと初期化
+                api_settings = merged_config.get("api_settings", {})
+                if "summary_ai_model" not in api_settings:
+                    api_settings["summary_ai_model"] = "openai-gpt4o"
+                if "conversation_ai_model" not in api_settings:
+                    api_settings["conversation_ai_model"] = "google-gemini-2.5-flash"
+                
+                # 音声設定の補完
+                audio_settings = merged_config.get("audio_settings", {})
+                if "use_gpu" not in audio_settings:
+                    audio_settings["use_gpu"] = True
+                if "whisper_model" not in audio_settings:
+                    audio_settings["whisper_model"] = "large-v3"
+                if "cpu_threads" not in audio_settings:
+                    audio_settings["cpu_threads"] = 8
+                if "beam_size" not in audio_settings:
+                    audio_settings["beam_size"] = 5
+                
+                # キャラクター設定の補完
+                ai_prompts = merged_config.get("ai_prompts", {})
+                if "character1_image_url" not in ai_prompts:
+                    ai_prompts["character1_image_url"] = ""
+                if "character1_image_flip" not in ai_prompts:
+                    ai_prompts["character1_image_flip"] = False
+                if "character2_image_url" not in ai_prompts:
+                    ai_prompts["character2_image_url"] = ""
+                if "character2_image_flip" not in ai_prompts:
+                    ai_prompts["character2_image_flip"] = False
+                
+                # tagsセクションの補完
+                if "tags" not in merged_config:
+                    merged_config["tags"] = []
+                
+                print(f"設定ファイル読み込み成功: {account_id}")
+                return merged_config
+                
+            except json.JSONDecodeError as e:
+                print(f"JSON読み込みエラー ({account_id}): {str(e)}")
+                print(f"デフォルト設定で初期化します")
+                return self.get_default_config_template()
+            except Exception as e:
+                print(f"設定ファイル読み込みエラー ({account_id}): {str(e)}")
+                print(f"デフォルト設定で初期化します")
+                return self.get_default_config_template()
         else:
-            return self.load_user_config("default")
-    
+            # 設定ファイルが存在しない場合
+            if account_id == "default":
+                # defaultファイルが存在しない場合は作成
+                print(f"デフォルト設定ファイルが見つかりません。新規作成します。")
+                default_config = self.get_default_config_template()
+                self.save_user_config("default", default_config)
+                return default_config
+            else:
+                # 他のアカウントの場合はdefaultをベースに作成
+                print(f"設定ファイルが見つかりません: {account_id}")
+                print(f"デフォルト設定をベースに初期化します")
+                default_config = self.load_user_config("default")
+                # アカウント固有の情報を更新
+                default_config["account_id"] = account_id
+                default_config["basic_settings"]["account_id"] = account_id
+                default_config["display_name"] = ""
+                return default_config
+
+    def _merge_config_deep(self, default, loaded):
+        """設定を深くマージして不足項目を補完"""
+        result = default.copy()
+        
+        for key, value in loaded.items():
+            if key in result:
+                if isinstance(value, dict) and isinstance(result[key], dict):
+                    # 辞書の場合は再帰的にマージ
+                    result[key] = self._merge_config_deep(result[key], value)
+                else:
+                    # その他の場合は読み込んだ値で上書き
+                    result[key] = value
+            else:
+                # 新しいキーの場合はそのまま追加
+                result[key] = value
+        
+        return result
+        
+    def load_special_users_tree(self, users_config):
+        """TreeViewにスペシャルユーザー設定を読み込み"""
+        # 既存のアイテムをクリア
+        for item in self.special_users_tree.get_children():
+            self.special_users_tree.delete(item)
+        
+        # 新しいアイテムを追加
+        for user_id, user_config in users_config.items():
+            self.special_users_tree.insert("", tk.END, text=user_id,
+                                        values=(user_config.get("display_name", ""),
+                                                user_config.get("analysis_ai_model", "openai-gpt4o"),
+                                                "有効" if user_config.get("analysis_enabled", True) else "無効",
+                                                user_config.get("template", "user_detail.html")))
+        
+        print(f"詳細ユーザー設定読み込み: {len(users_config)}件")
+
+
+
     def get_default_config_template(self):
         """デフォルト設定テンプレートを取得"""
         return {
@@ -155,7 +268,31 @@ class ConfigManager:
                 "enable_audio_player": True,
                 "enable_timeshift_jump": True
             },
-            "special_users": []
+            "special_users": [],  # 後方互換性のため保持
+            
+            # スペシャルユーザー詳細設定を追加
+            "special_users_config": {
+                # グローバル設定（デフォルト値）
+                "default_analysis_enabled": True,
+                "default_analysis_ai_model": "openai-gpt4o",
+                "default_analysis_prompt": "以下のユーザーのコメント履歴を分析して、このユーザーの特徴、傾向、配信との関わり方について詳しく分析してください。\n\n分析観点：\n- コメントの頻度と投稿タイミング\n- コメント内容の傾向（質問、感想、ツッコミなど）\n- 配信者との関係性\n- 他の視聴者との関わり\n- このユーザーの配信に対する貢献度\n- 特徴的な発言や行動パターン",
+                "default_template": "user_detail.html",
+                
+                # 個別ユーザー設定
+                "users": {
+                    # 例：
+                    # "12345": {
+                    #     "user_id": "12345",
+                    #     "display_name": "特別なユーザー",
+                    #     "analysis_enabled": True,
+                    #     "analysis_ai_model": "google-gemini-2.5-flash",
+                    #     "analysis_prompt": "このユーザー専用の分析プロンプト...",
+                    #     "template": "special_template.html",
+                    #     "description": "このユーザーについてのメモ",
+                    #     "tags": ["VIP", "古参"]
+                    # }
+                }
+            }
         }
     
     def _merge_config(self, default, loaded):
