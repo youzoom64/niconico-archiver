@@ -271,13 +271,17 @@ class UserConfigWindow:
         tk.Checkbutton(display_frame, text="タイムシフトジャンプ", variable=self.timeshift_jump_var).pack(anchor=tk.W)  
 
 
-        # スペシャルユーザー設定
+        # スペシャルユーザー設定セクションを追加
         special_frame = tk.LabelFrame(scrollable_frame, text="スペシャルユーザー設定")
         special_frame.pack(fill=tk.X, pady=5)
         
         tk.Label(special_frame, text="特別処理対象ユーザーID (カンマ区切り):").pack(anchor=tk.W)
         self.special_users_var = tk.StringVar()
         tk.Entry(special_frame, textvariable=self.special_users_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        # 同期ボタンを追加
+        sync_button = tk.Button(special_frame, text="↓ 個別設定に反映", command=self.sync_special_users_to_tree)
+        sync_button.pack(anchor=tk.W, padx=5, pady=2)
         
         # スペシャルユーザー一覧表示
         tk.Label(special_frame, text="登録済みスペシャルユーザー:").pack(anchor=tk.W, pady=(10, 0))
@@ -327,6 +331,8 @@ class UserConfigWindow:
         tk.Button(user_control_frame, text="編集", command=self.edit_special_user).pack(side=tk.LEFT, padx=5)
         tk.Button(user_control_frame, text="削除", command=self.remove_special_user).pack(side=tk.LEFT, padx=5)
         tk.Button(user_control_frame, text="複製", command=self.copy_special_user).pack(side=tk.LEFT, padx=5)
+        # 逆方向の同期ボタンを追加
+        tk.Button(user_control_frame, text="↑ テキストに反映", command=self.sync_tree_to_special_users).pack(side=tk.LEFT, padx=5)
 
         # ユーザー一覧TreeView
         self.special_users_tree = ttk.Treeview(users_frame, 
@@ -350,6 +356,7 @@ class UserConfigWindow:
 
         self.special_users_tree.pack(side="left", fill=tk.BOTH, expand=True, padx=5, pady=5)
         tree_scrollbar.pack(side="right", fill="y")
+        
         # タグ設定セクションを追加
         tag_frame = tk.LabelFrame(scrollable_frame, text="タグ設定")
         tag_frame.pack(fill=tk.X, pady=5)
@@ -370,6 +377,63 @@ class UserConfigWindow:
         tk.Button(button_frame, text="適用", command=self.apply_config).pack(side=tk.LEFT, padx=5)
         tk.Button(button_frame, text="キャンセル", command=self.window.destroy).pack(side=tk.RIGHT, padx=5)
         
+
+    def sync_special_users_to_tree(self):
+        """テキストフィールドのユーザーIDをTreeViewに同期"""
+        # テキストフィールドからユーザーIDを取得
+        user_ids = [user.strip() for user in self.special_users_var.get().split(",") if user.strip()]
+        
+        # 現在のTreeViewのユーザーIDを取得
+        existing_users = set()
+        for item in self.special_users_tree.get_children():
+            existing_users.add(self.special_users_tree.item(item)["text"])
+        
+        # 新しいユーザーIDをTreeViewに追加
+        added_count = 0
+        for user_id in user_ids:
+            if user_id not in existing_users:
+                # デフォルト設定でTreeViewに追加
+                user_config = {
+                    "user_id": user_id,
+                    "display_name": f"ユーザー{user_id}",
+                    "analysis_enabled": self.default_analysis_enabled_var.get(),
+                    "analysis_ai_model": self.default_analysis_ai_model_var.get(),
+                    "analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
+                    "template": self.default_template_var.get(),
+                    "description": "",
+                    "tags": []
+                }
+                
+                # メモリに保存
+                if not hasattr(self, '_tree_user_data'):
+                    self._tree_user_data = {}
+                self._tree_user_data[user_id] = user_config
+                
+                # TreeViewに追加
+                self.special_users_tree.insert("", tk.END, text=user_id,
+                                            values=(user_config["display_name"],
+                                                    user_config["analysis_ai_model"],
+                                                    "有効" if user_config["analysis_enabled"] else "無効",
+                                                    user_config["template"]))
+                added_count += 1
+        
+        if added_count > 0:
+            messagebox.showinfo("同期完了", f"{added_count}件のユーザーを個別設定に追加しました")
+        else:
+            messagebox.showinfo("同期完了", "追加するユーザーはありませんでした")
+
+    def sync_tree_to_special_users(self):
+        """TreeViewのユーザーIDをテキストフィールドに同期"""
+        user_ids = []
+        for item in self.special_users_tree.get_children():
+            user_ids.append(self.special_users_tree.item(item)["text"])
+        
+        self.special_users_var.set(", ".join(user_ids))
+        messagebox.showinfo("同期完了", f"{len(user_ids)}件のユーザーIDをテキストフィールドに反映しました")
+
+
+
+
     def load_users(self):
         user_info = self.config_manager.get_user_display_info()
         self.user_listbox.delete(0, tk.END)
@@ -615,42 +679,43 @@ class UserConfigWindow:
         """TreeViewからスペシャルユーザー設定を取得"""
         users_config = {}
         
-        # 実際の詳細データを保存するための辞書（メモリ上で管理）
+        # _tree_user_dataの初期化
         if not hasattr(self, '_tree_user_data'):
             self._tree_user_data = {}
         
         for item in self.special_users_tree.get_children():
             user_id = self.special_users_tree.item(item)["text"]
-            values = self.special_users_tree.item(item)["values"]
             
-            # メモリ上のデータがあれば使用、なければデフォルト
+            # メモリ上のデータが必須 - TreeViewからの復元はしない
             if user_id in self._tree_user_data:
-                users_config[user_id] = self._tree_user_data[user_id]
+                users_config[user_id] = self._tree_user_data[user_id].copy()
+                print(f"メモリからデータ取得: {user_id}")
             else:
-                users_config[user_id] = {
-                    "user_id": user_id,
-                    "display_name": values[0] if len(values) > 0 else "",
-                    "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
-                    "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
-                    "template": values[3] if len(values) > 3 else "user_detail.html",
-                    "analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
-                    "description": "",
-                    "tags": []
-                }
+                print(f"警告: ユーザー {user_id} のデータがメモリにありません")
+                # データが不完全なのでスキップするか、エラーにする
+                continue
         
+        print(f"保存対象ユーザー数: {len(users_config)}")
         return users_config
 
 
 
     def save_config(self):
         """設定保存時に詳細ユーザー設定も含める"""
+        print("=== 保存処理開始 ===")
+        print(f"_tree_user_data: {list(getattr(self, '_tree_user_data', {}).keys())}")
+        
         config = self.get_current_config()
         account_id = config["account_id"]
+        
+        special_users_config = config["special_users_config"]["users"]
+        print(f"保存対象ユーザー数: {len(special_users_config)}")
+        for user_id, user_data in special_users_config.items():
+            print(f"  {user_id}: {user_data.get('display_name', 'NO_NAME')}")
+        
         if account_id:
-            # TreeViewの詳細データをconfigに含める
-            config["special_users_config"]["users"] = self.get_complete_special_users_from_tree()
-            
             self.config_manager.save_user_config(account_id, config)
+            print("=== ファイル保存完了 ===")
             self.load_users()
             self.refresh_callback()
             self.update_special_users_list(config["special_users"])
@@ -745,9 +810,7 @@ class UserConfigWindow:
                                                 "有効" if user_config["analysis_enabled"] else "無効",
                                                 user_config["template"]))
             
-            # ここで保存処理を追加
-            self.save_config()  # 設定を即座に保存
-            print(f"スペシャルユーザー追加・保存完了: {user_id}")
+            print(f"スペシャルユーザー追加: {user_id}")
 
     def edit_special_user(self):
         """選択されたスペシャルユーザーを編集"""
@@ -792,8 +855,6 @@ class UserConfigWindow:
                                             "有効" if user_config["analysis_enabled"] else "無効",
                                             user_config["template"]))
             
-            # 保存処理を追加
-            self.save_config()
             print(f"スペシャルユーザー編集・保存完了: {user_id} -> {new_user_id}")
 
     def remove_special_user(self):
@@ -815,8 +876,6 @@ class UserConfigWindow:
             if hasattr(self, '_tree_user_data') and user_id in self._tree_user_data:
                 del self._tree_user_data[user_id]
             
-            # 保存処理を追加
-            self.save_config()
             print(f"スペシャルユーザー削除・保存完了: {user_id}")
 
     def copy_special_user(self):
@@ -847,12 +906,23 @@ class UserConfigWindow:
             
             if dialog.result:
                 user_config = dialog.result
-                self.special_users_tree.insert("", tk.END, text=user_config["user_id"],
+                new_user_id = user_config["user_id"]
+                
+                # メモリ上にデータを保存（これが抜けていた）
+                if not hasattr(self, '_tree_user_data'):
+                    self._tree_user_data = {}
+                self._tree_user_data[new_user_id] = user_config
+                
+                # TreeViewに追加
+                self.special_users_tree.insert("", tk.END, text=new_user_id,
                                             values=(user_config["display_name"], 
                                                     user_config["analysis_ai_model"],
                                                     "有効" if user_config["analysis_enabled"] else "無効",
                                                     user_config["template"]))
-
+                
+                print(f"スペシャルユーザー複製完了: {user_id} -> {new_user_id}")
+                    
+           
     def get_special_user_config(self, user_id):
         """TreeViewからユーザー設定を取得"""
         if hasattr(self, '_tree_user_data') and user_id in self._tree_user_data:
