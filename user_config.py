@@ -283,6 +283,18 @@ class UserConfigWindow:
         tk.Label(special_frame, text="登録済みスペシャルユーザー:").pack(anchor=tk.W, pady=(10, 0))
         self.special_users_listbox = tk.Listbox(special_frame, height=4)
         self.special_users_listbox.pack(fill=tk.X, padx=5, pady=2)
+
+        # タグ設定セクションを追加
+        tag_frame = tk.LabelFrame(scrollable_frame, text="タグ設定")
+        tag_frame.pack(fill=tk.X, pady=5)
+
+        tk.Label(tag_frame, text="タグ (カンマ区切り):").pack(anchor=tk.W)
+        self.tags_var = tk.StringVar()
+        tk.Entry(tag_frame, textvariable=self.tags_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+
+        tk.Label(tag_frame, text="登録済みタグ:").pack(anchor=tk.W, pady=(10, 0))
+        self.tags_listbox = tk.Listbox(tag_frame, height=4)
+        self.tags_listbox.pack(fill=tk.X, padx=5, pady=2)
         
         # 保存・キャンセルボタン
         button_frame = tk.Frame(scrollable_frame)
@@ -377,6 +389,10 @@ class UserConfigWindow:
             self.special_users_var.set(", ".join(special_users))
             self.update_special_users_list(special_users)
             
+            tags = config.get("tags", [])
+            self.tags_var.set(", ".join(tags))
+            self.update_tags_list(tags)
+
             print(f"設定読み込み完了: {account_id}")
             
         except Exception as e:
@@ -389,7 +405,14 @@ class UserConfigWindow:
         self.special_users_listbox.delete(0, tk.END)
         for i, user in enumerate(special_users, 1):
             self.special_users_listbox.insert(tk.END, f"{i}. {user}")
-        
+
+    def update_tags_list(self, tags):
+        """タグ一覧表示を更新"""
+        self.tags_listbox.delete(0, tk.END)
+        for i, tag in enumerate(tags, 1):
+            self.tags_listbox.insert(tk.END, f"{i}. {tag}")
+
+
     def create_user(self):
         account_id = self.account_var.get().strip()
         
@@ -489,6 +512,7 @@ class UserConfigWindow:
                 "character2_image_flip": self.character2_image_flip_var.get(),
                 "conversation_turns": self.conversation_turns_var.get()
             },
+            
             "display_features": {
                 "enable_emotion_scores": self.emotion_scores_var.get(),
                 "enable_comment_ranking": self.comment_ranking_var.get(),
@@ -497,7 +521,8 @@ class UserConfigWindow:
                 "enable_audio_player": self.audio_player_var.get(),
                 "enable_timeshift_jump": self.timeshift_jump_var.get()
             },
-            "special_users": [user.strip() for user in self.special_users_var.get().split(",") if user.strip()]
+            "special_users": [user.strip() for user in self.special_users_var.get().split(",") if user.strip()],
+            "tags": [tag.strip() for tag in self.tags_var.get().split(",") if tag.strip()]
         }
         
     def save_config(self):
