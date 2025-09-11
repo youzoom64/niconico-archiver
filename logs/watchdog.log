@@ -453,3 +453,25 @@
 2025-09-11 22:22:11 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-11 22:22:11 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-11 22:22:11 - INFO - [123] 自動監視開始
+2025-09-11 22:26:24 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:26:24 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:26:24 - INFO - [123] 自動監視開始
+2025-09-11 22:27:28 - INFO - [123] 監視停止
+2025-09-11 22:28:21 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:28:21 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:28:21 - INFO - [123] 自動監視開始
+2025-09-11 22:28:36 - INFO - [123] 監視停止
+2025-09-11 22:31:32 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:31:32 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:31:32 - INFO - [123] 自動監視開始
+2025-09-11 22:32:49 - INFO - [123] 監視停止
+2025-09-11 22:36:48 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:36:48 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:36:48 - INFO - [123] 自動監視開始
+2025-09-11 22:38:12 - INFO - [123] 監視停止
+2025-09-11 22:39:05 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:39:05 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:39:05 - INFO - [123] 自動監視開始
+2025-09-11 22:46:16 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:46:16 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-11 22:46:16 - INFO - [123] 自動監視開始

@@ -29,8 +29,8 @@ def process(pipeline_data):
         # 4. スペシャルユーザーが見つかった場合、ページを生成
         if found_special_users:
             for user_data in found_special_users:
-                create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value)
-        
+                create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value, config)  # configを追加
+                
         print(f"Step06 完了: {lv_value} - 検出スペシャルユーザー数: {len(found_special_users)}")
         return {"special_users_found": len(found_special_users), "users": [u['user_id'] for u in found_special_users]}
         
@@ -47,8 +47,46 @@ def load_broadcast_data(broadcast_dir, lv_value):
     raise Exception(f"統合JSONファイルが見つかりません: {json_path}")
 
 def get_special_users_from_config(config):
-    """設定からスペシャルユーザーリストを取得"""
-    return config.get("special_users", [])
+    """設定からスペシャルユーザーリストを取得（詳細設定対応）"""
+    # 新しい詳細設定から取得
+    special_users_config = config.get("special_users_config", {})
+    detailed_users = special_users_config.get("users", {})
+    
+    # 詳細設定があるユーザーIDを取得
+    user_ids_from_detailed = list(detailed_users.keys())
+    
+    # 従来のsimple listも取得（後方互換性）
+    user_ids_from_simple = config.get("special_users", [])
+    
+    # 両方をマージ（重複排除）
+    all_user_ids = list(set(user_ids_from_detailed + user_ids_from_simple))
+    
+    print(f"詳細設定ユーザー: {user_ids_from_detailed}")
+    print(f"シンプル設定ユーザー: {user_ids_from_simple}")
+    print(f"統合ユーザーリスト: {all_user_ids}")
+    
+    return all_user_ids
+
+def get_user_detail_config(config, user_id):
+    """個別ユーザーの詳細設定を取得"""
+    special_users_config = config.get("special_users_config", {})
+    detailed_users = special_users_config.get("users", {})
+    
+    if user_id in detailed_users:
+        return detailed_users[user_id]
+    
+    # デフォルト設定を返す
+    return {
+        "user_id": user_id,
+        "display_name": f"ユーザー{user_id}",
+        "analysis_enabled": special_users_config.get("default_analysis_enabled", True),
+        "analysis_ai_model": special_users_config.get("default_analysis_ai_model", "openai-gpt4o"),
+        "analysis_prompt": special_users_config.get("default_analysis_prompt", ""),
+        "template": special_users_config.get("default_template", "user_detail.html"),
+        "description": "",
+        "tags": []
+    }
+
 
 def find_special_users_in_ncv(ncv_xml_path, special_users):
    """NCVのXMLファイルからスペシャルユーザーを検索"""
@@ -122,7 +160,7 @@ def extract_user_id(user_id_str):
     
     return None
 
-def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value):
+def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value, config=None):
     """スペシャルユーザーの一覧ページと個別ページを生成"""
     try:
         user_id = user_data['user_id']
@@ -135,15 +173,15 @@ def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value
         template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
         
         # アカウントディレクトリ直下にユーザーディレクトリ作成
-        account_dir = os.path.dirname(broadcast_dir)  # broadcast_dirの親ディレクトリがアカウントディレクトリ
+        account_dir = os.path.dirname(broadcast_dir)
         user_output_dir = os.path.join(account_dir, f"special_user_{user_id}")
         os.makedirs(user_output_dir, exist_ok=True)
         
         # CSS/JSファイルをコピー
         copy_static_files(template_dir, user_output_dir)
         
-        # 1. 個別ページ生成
-        create_user_detail_page(user_data, broadcast_data, template_dir, user_output_dir, lv_value)
+        # 1. 個別ページ生成（configを渡す）
+        create_user_detail_page(user_data, broadcast_data, template_dir, user_output_dir, lv_value, config)
         
         # 2. 一覧ページ生成または更新
         update_user_list_page(user_data, broadcast_data, template_dir, user_output_dir, lv_value)
@@ -153,6 +191,23 @@ def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value
     except Exception as e:
         print(f"スペシャルユーザーページ生成エラー: {str(e)}")
         raise
+
+def generate_analysis_text_with_config(comments, config, user_id):
+    """詳細設定を考慮した分析テキストを生成"""
+    user_detail_config = get_user_detail_config(config, user_id)
+    
+    if not user_detail_config.get("analysis_enabled", True):
+        return "このユーザーの分析は無効化されています。"
+    
+    # 基本的な分析は既存の関数を使用
+    basic_analysis = generate_analysis_text(comments)
+    
+    # 詳細設定がある場合は追加情報を付加
+    if user_detail_config.get("description"):
+        basic_analysis += f"<br><br><strong>メモ:</strong><br>{user_detail_config['description']}"
+    
+    return basic_analysis
+
 
 
 def update_user_list_page(user_data, broadcast_data, template_dir, output_dir, lv_value):
@@ -231,12 +286,26 @@ def copy_static_files(template_dir, output_dir):
     except Exception as e:
         print(f"静的ファイルコピーエラー: {str(e)}")
 
-def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir, lv_value):
+
+def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir, lv_value, config=None):
     """個別ユーザーページを生成"""
-    template_path = os.path.join(template_dir, 'user_detail.html')
+    user_id = user_data['user_id']
+    
+    # ユーザーの詳細設定を取得
+    if config:
+        user_detail_config = get_user_detail_config(config, user_id)
+        template_name = user_detail_config.get("template", "user_detail.html")
+        print(f"ユーザー {user_id} のテンプレート: {template_name}")
+    else:
+        template_name = "user_detail.html"
+    
+    template_path = os.path.join(template_dir, template_name)
     if not os.path.exists(template_path):
         print(f"テンプレートファイルが見つかりません: {template_path}")
-        return
+        # フォールバックでデフォルトテンプレートを使用
+        template_path = os.path.join(template_dir, 'user_detail.html')
+        if not os.path.exists(template_path):
+            return
     
     with open(template_path, 'r', encoding='utf-8') as f:
         template = f.read()
@@ -244,8 +313,11 @@ def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir,
     # コメント行を生成
     comment_rows = generate_comment_rows(user_data['comments'])
     
-    # 分析テキストを生成
-    analysis_text = generate_analysis_text(user_data['comments'])
+    # 分析テキストを生成（詳細設定を考慮）
+    if config:
+        analysis_text = generate_analysis_text_with_config(user_data['comments'], config, user_id)
+    else:
+        analysis_text = generate_analysis_text(user_data['comments'])
     
     # テンプレート変数を置換
     html_content = template.replace('{{broadcast_title}}', broadcast_data.get('live_title', 'タイトル不明'))
@@ -264,7 +336,6 @@ def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir,
         f.write(html_content)
     
     print(f"個別ページ生成: {output_path}")
-
 def get_user_icon_path(user_id):
     """ニコニコ動画のユーザーアイコンパスを生成"""
     if len(user_id) <= 4:
