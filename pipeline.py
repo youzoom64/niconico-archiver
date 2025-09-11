@@ -32,12 +32,13 @@ def should_run_step(config, step_name):
         'step03_emotion_scorer': config['display_features']['enable_emotion_scores'],
         'step04_word_analyzer': config['display_features']['enable_word_ranking'],
         'step05_summarizer': config['ai_features']['enable_summary_text'],
-        'step06_special_user_html_generator': True,
+        # 'step06_special_user_html_generator': config.get('is_special_user', False),
         'step07_music_generator': config['ai_features']['enable_ai_music'],
         'step08_image_generator': config['ai_features']['enable_summary_image'],
         'step09_conversation_generator': True,
         'step10_screenshot_generator': config['display_features'].get('enable_thumbnails', True),
         'step11_comment_processor': True,
+        'step11_06_special_user_html_generator': config.get('is_special_user', False),
         'step12_html_generator': True,
         'step13_index_generator': True
     }
@@ -73,12 +74,13 @@ def run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_val
             'step03_emotion_scorer', 
             'step04_word_analyzer',
             'step05_summarizer',
-            'step06_special_user_html_generator',
+            # 'step06_special_user_html_generator',
             'step07_music_generator',
             'step08_image_generator',
             'step09_conversation_generator',
             'step10_screenshot_generator',
             'step11_comment_processor',
+            'step11_06_special_user_html_generator',
             'step12_html_generator',
             'step13_index_generator'
         ]
