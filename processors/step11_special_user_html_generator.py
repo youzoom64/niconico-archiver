@@ -144,6 +144,13 @@ def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value
         
         print(f"スペシャルユーザーページ生成中: {user_id} ({user_name})")
         
+        # ニックネームを取得して上書き
+        real_nickname = get_user_nickname_with_cache(user_id)
+        if real_nickname:
+            user_data['user_name'] = real_nickname
+            user_name = real_nickname
+            print(f"実際のニックネーム取得: {user_id} -> {real_nickname}")
+        
         # テンプレートディレクトリ
         template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
         
@@ -166,6 +173,81 @@ def create_special_user_pages(user_data, broadcast_data, broadcast_dir, lv_value
     except Exception as e:
         print(f"スペシャルユーザーページ生成エラー: {str(e)}")
         raise
+
+def get_user_nickname(user_id):
+    """ニコニコ動画のユーザーページからニックネームを取得"""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        import time
+        
+        url = f"https://www.nicovideo.jp/user/{user_id}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # ニックネームを取得
+        nickname_element = soup.find(class_="UserDetailsHeader-nickname")
+        
+        if nickname_element:
+            nickname = nickname_element.get_text(strip=True)
+            print(f"ユーザー {user_id} のニックネーム: {nickname}")
+            time.sleep(1)  # レート制限対策
+            return nickname
+        else:
+            print(f"ユーザー {user_id} のニックネームが見つかりません")
+            return None
+            
+    except Exception as e:
+        print(f"ユーザー {user_id} の情報取得エラー: {e}")
+        return None
+
+def get_user_nickname_with_cache(user_id, cache_dir="user_cache"):
+    """キャッシュ付きでニックネーム取得"""
+    import json
+    import os
+    from datetime import datetime, timedelta
+    
+    # キャッシュディレクトリ作成
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, f"{user_id}.json")
+    
+    # キャッシュチェック（7日間有効）
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            
+            cache_time = datetime.fromisoformat(cache_data['cached_at'])
+            if datetime.now() - cache_time < timedelta(days=7):
+                print(f"キャッシュからニックネーム取得: {user_id} -> {cache_data['nickname']}")
+                return cache_data['nickname']
+        except Exception as e:
+            print(f"キャッシュ読み込みエラー: {e}")
+    
+    # 新規取得
+    nickname = get_user_nickname(user_id)
+    
+    if nickname:
+        # キャッシュ保存
+        cache_data = {
+            'user_id': user_id,
+            'nickname': nickname,
+            'cached_at': datetime.now().isoformat()
+        }
+        try:
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"キャッシュ保存エラー: {e}")
+    
+    return nickname
 
 def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir, lv_value, config=None):
     """個別ユーザーページを生成"""
@@ -303,6 +385,12 @@ def generate_ai_analysis(comments, config, user_detail_config):
         
         # プロンプトを構築
         analysis_prompt = user_detail_config.get("analysis_prompt", "")
+        analysis_prompt = analysis_prompt.replace("{name}", user_detail_config.get('display_name', user_detail_config['user_id']))
+
+        # system promptも置換
+        system_prompt = "あなたは優秀な精神科医です。次の文章は{name}と言う人物のコメントです。この文章を要約し、感情分析と精神分析をしてください。特に攻撃性と現実逃避に焦点を当てて下さい。要約は箇条書きにし、人物名に注目してください。そして鋭く批判的に要約してください。行の最後は必ず「。」で終わる事。"
+        system_prompt = system_prompt.replace("{name}", user_detail_config.get('display_name', user_detail_config['user_id']))
+
         user_data_text = "\n".join(comment_texts)
         
         full_prompt = f"""
@@ -325,7 +413,7 @@ def generate_ai_analysis(comments, config, user_detail_config):
         response = client.chat.completions.create(
             model="gpt-4o" if ai_model == "openai-gpt4o" else "gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "あなたは配信コメントの分析専門家です。ユーザーの行動パターンや特徴を詳しく分析してください。"},
+                {"role": "system", "content": system_prompt},  # 置換済みを使用
                 {"role": "user", "content": full_prompt}
             ],
             max_tokens=1500,
@@ -452,7 +540,7 @@ def update_user_list_page(user_data, broadcast_data, template_dir, output_dir, l
     
     # 全ての放送アイテムを結合
     all_items = '\n'.join(existing_items)
-    
+
     # テンプレート変数を置換
     html_content = template.replace('{{broadcaster_name}}', user_data['user_name'])
     html_content = html_content.replace('{{thumbnail_url}}', get_user_icon_path(user_data['user_id']))
@@ -584,3 +672,4 @@ def escape_html(text):
                 .replace('>', '&gt;')
                 .replace('"', '&quot;')
                 .replace("'", '&#x27;'))
+

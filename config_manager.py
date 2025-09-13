@@ -35,6 +35,11 @@ class ConfigManager:
                 "cpu_threads": 8,
                 "beam_size": 5
             },
+            "music_settings": {
+                "style": "J-Pop, Upbeat",  # デフォルト曲調
+                "model": "V4",             # モデル選択 (V4が最新)
+                "instrumental": False      # 歌あり/なし
+            },
             "api_settings": {
                 "ai_model": "openai-gpt4o",
                 "openai_api_key": "",
@@ -130,7 +135,19 @@ class ConfigManager:
                     audio_settings["cpu_threads"] = 8
                 if "beam_size" not in audio_settings:
                     audio_settings["beam_size"] = 5
-                
+                    
+                # 音楽設定の補完
+                music_settings = merged_config.get("music_settings", {})
+                if "style" not in music_settings:
+                    music_settings["style"] = "J-Pop, Upbeat"
+                if "model" not in music_settings:
+                    music_settings["model"] = "V4"
+                if "instrumental" not in music_settings:
+                    music_settings["instrumental"] = False
+                merged_config["music_settings"] = music_settings
+
+
+
                 # キャラクター設定の補完
                 ai_prompts = merged_config.get("ai_prompts", {})
                 if "character1_image_url" not in ai_prompts:
@@ -219,6 +236,11 @@ class ConfigManager:
                 "whisper_model": "large-v3", 
                 "cpu_threads": 8,
                 "beam_size": 5
+            },
+            "music_settings": {
+                "style": "J-Pop, Upbeat",  # デフォルト曲調
+                "model": "V4",             # モデル選択 (V4が最新)
+                "instrumental": False      # 歌あり/なし
             },
             "ai_features": {
                 "enable_summary_text": True,
