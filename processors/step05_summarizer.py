@@ -93,10 +93,13 @@ def generate_summary_single(text, prompt, config, ai_model):
     """単一テキストの要約生成"""
     try:
         full_prompt = f"{prompt}\n\n{text}"
+        print(f"[DEBUG] generate_summary_single: モデル={ai_model}, prompt文字数={len(full_prompt)}")
         
         if ai_model == "openai-gpt4o":
+            print("[DEBUG] OpenAI GPT-4o APIを呼び出します")
             return call_openai_api(full_prompt, config)
         elif ai_model == "google-gemini-2.5-flash":
+            print("[DEBUG] Google Gemini 2.5 Flash APIを呼び出します")
             return call_google_api(full_prompt, config)
         else:
             raise Exception(f"未対応のAIモデル: {ai_model}")
@@ -105,46 +108,49 @@ def generate_summary_single(text, prompt, config, ai_model):
         print(f"単一要約生成エラー: {str(e)}")
         raise
 
+
 def generate_summary_chunked(text, prompt, config, ai_model, chunk_size):
     """分割テキストの要約生成"""
     try:
-        # テキストを適切なサイズに分割
         chunks = split_text_smart(text, chunk_size)
-        print(f"テキストを{len(chunks)}個のチャンクに分割")
+        print(f"[DEBUG] テキストを{len(chunks)}個のチャンクに分割しました (モデル={ai_model})")
         
         chunk_summaries = []
-        
-        # 各チャンクを要約
         for i, chunk in enumerate(chunks):
-            print(f"チャンク {i+1}/{len(chunks)} を要約中...")
+            print(f"[DEBUG] チャンク {i+1}/{len(chunks)} 要約開始: 長さ={len(chunk)}")
             chunk_prompt = f"{prompt}\n\n以下は配信の一部です。この部分を要約してください：\n\n{chunk}"
             
             if ai_model == "openai-gpt4o":
+                print("[DEBUG] OpenAI GPT-4o APIを呼び出します")
                 summary = call_openai_api(chunk_prompt, config)
             elif ai_model == "google-gemini-2.5-flash":
+                print("[DEBUG] Google Gemini 2.5 Flash APIを呼び出します")
                 summary = call_google_api(chunk_prompt, config)
             else:
                 raise Exception(f"未対応のAIモデル: {ai_model}")
             
             chunk_summaries.append(summary)
         
-        # 全チャンクの要約を統合
+        print("[DEBUG] チャンク要約を統合して最終要約を生成します")
         combined_summaries = "\n\n".join(chunk_summaries)
         final_prompt = f"以下は配信の各部分の要約です。これらを統合して、配信全体の包括的な要約を作成してください：\n\n{combined_summaries}"
         
         if ai_model == "openai-gpt4o":
+            print("[DEBUG] OpenAI GPT-4o APIを呼び出します（統合要約）")
             final_summary = call_openai_api(final_prompt, config)
         elif ai_model == "google-gemini-2.5-flash":
+            print("[DEBUG] Google Gemini 2.5 Flash APIを呼び出します（統合要約）")
             final_summary = call_google_api(final_prompt, config)
         else:
             raise Exception(f"未対応のAIモデル: {ai_model}")
         
-        print("チャンク要約統合完了")
+        print("[DEBUG] チャンク要約統合完了")
         return final_summary
         
     except Exception as e:
         print(f"分割要約生成エラー: {str(e)}")
         raise
+
 
 def split_text_smart(text, chunk_size):
     """テキストを適切に分割（文の境界を考慮）"""
@@ -185,22 +191,36 @@ def call_openai_api(prompt, config):
         if not api_key:
             raise Exception("OpenAI API Keyが設定されていません")
         
+        # デバッグログ
+        print(f"[DEBUG] OpenAI API呼び出し開始: モデル=gpt-4o, prompt文字数={len(prompt)}")
+
         client = openai.OpenAI(api_key=api_key)
-        
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=1000,
             temperature=0.7
         )
+
+        # レスポンス情報をログ出力
+        if hasattr(response, "usage"):
+            print(f"[DEBUG] OpenAI使用トークン: prompt={response.usage.prompt_tokens}, completion={response.usage.completion_tokens}, total={response.usage.total_tokens}")
+        else:
+            print("[DEBUG] OpenAIトークン使用量情報なし")
+
+        # 応答本文の取り出し
+        result_text = response.choices[0].message.content.strip() if response.choices else ""
+        if not result_text:
+            print("[WARN] OpenAI APIから空のレスポンスが返されました")
+        else:
+            print(f"[DEBUG] OpenAIレスポンス文字数: {len(result_text)}")
         
-        return response.choices[0].message.content.strip()
-        
+        return result_text
+
     except Exception as e:
         print(f"OpenAI API呼び出しエラー: {str(e)}")
         raise
+
 
 def call_google_api(prompt, config):
     """Google Gemini 2.5 Flashを呼び出し"""
@@ -209,6 +229,9 @@ def call_google_api(prompt, config):
         if not api_key:
             raise Exception("Google API Keyが設定されていません")
         
+        # デバッグログ
+        print(f"[DEBUG] Google API呼び出し開始: モデル=gemini-2.0-flash-exp, prompt文字数={len(prompt)}")
+
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
         
@@ -219,12 +242,26 @@ def call_google_api(prompt, config):
                 temperature=0.7
             )
         )
+
+        # 追加デバッグログ
+        if hasattr(response, "candidates"):
+            print(f"[DEBUG] Google APIレスポンス候補数: {len(response.candidates)}")
+        if hasattr(response, "usage_metadata"):
+            print(f"[DEBUG] Google API token使用量: {response.usage_metadata}")
+
+        # 安全に text を取り出す
+        result_text = getattr(response, "text", "").strip()
+        if not result_text:
+            print("[WARN] Google APIから空のレスポンスが返されました")
+        else:
+            print(f"[DEBUG] Google APIレスポンス文字数: {len(result_text)}")
         
-        return response.text.strip()
-        
+        return result_text
+
     except Exception as e:
         print(f"Google API呼び出しエラー: {str(e)}")
         raise
+
 
 def update_broadcast_json(broadcast_dir, lv_value, summary):
     """統合JSONに要約を追加"""
