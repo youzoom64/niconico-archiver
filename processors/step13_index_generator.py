@@ -73,7 +73,7 @@ def collect_broadcast_data(account_dir):
                             'html_file': html_file,
                             'image_url': data.get('image_generation', {}).get('imgur_url', ''),
                             'music_urls': get_music_urls_multiple(data),
-                            'transcript_text': get_transcript_text(item_path, lv_value),
+                            'transcript_segments': get_transcript_segments(item_path, lv_value),
                             'tags': []
                         }
                         broadcast_list.append(broadcast_info)
@@ -177,7 +177,7 @@ def create_index_html(broadcast_list, all_tags):
             'summary': broadcast['summary_text'],
             'imageUrl': broadcast['image_url'],
             'musicUrls': broadcast['music_urls'],  # 配列として渡す
-            'comments': broadcast['transcript_text'].split('。')[:10]
+            'comments': broadcast['transcript_segments']
         }
     
     html_content = f"""<!DOCTYPE html>
@@ -642,3 +642,20 @@ def create_tag_html(filtered_broadcasts, tag, all_tags):
     )
     
     return html_content
+
+def get_transcript_segments(broadcast_dir, lv_value):
+    """文字起こしセグメントを個別に取得"""
+    transcript_file = os.path.join(broadcast_dir, f"{lv_value}_transcript.json")
+    if os.path.exists(transcript_file):
+        with open(transcript_file, 'r', encoding='utf-8') as f:
+            transcript_data = json.load(f)
+        
+        transcripts = transcript_data.get('transcripts', [])
+        # 空でないセグメントのみ取得、最大10個
+        segments = []
+        for t in transcripts:
+            text = t.get('text', '').strip()
+            if text and len(segments) < 10:
+                segments.append(text)
+        return segments
+    return []
