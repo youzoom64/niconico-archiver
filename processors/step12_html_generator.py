@@ -178,6 +178,7 @@ def prepare_comment_ranking(ranking_data, account_dir, lv_value):
                 if user_id not in all_comments:
                     all_comments[user_id] = []
                 all_comments[user_id].append({
+                    'index': comment.get('no', 0),  # indexを追加
                     'text': html.escape(comment.get('text', '')),
                     'time': format_seconds_to_time(comment.get('broadcast_seconds', 0)),
                     'broadcast_seconds': comment.get('broadcast_seconds', 0)
@@ -210,13 +211,13 @@ def prepare_comment_ranking(ranking_data, account_dir, lv_value):
                 'user_id': user_id,
                 'user_name': user_name_display,
                 'user_url': user_url,
-                'icon_url': f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{user_id[:4]}/{user_id}.jpg",
+                'icon_url': f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{user_id[:-4]}/{user_id}.jpg",
                 'comment_count': rank_data.get('comment_count', 0),
                 'first_comment': html.escape(rank_data.get('first_comment', '')),
                 'first_comment_time': format_seconds_to_time(rank_data.get('first_comment_time', 0)),
                 'last_comment': html.escape(rank_data.get('last_comment', '')),
                 'last_comment_time': format_seconds_to_time(rank_data.get('last_comment_time', 0)),
-                'all_comments': user_comments  # 全コメントを追加
+                'comments': user_comments  # キー名をcommentsに統一
             })
         
         print(f"コメントランキング準備: {len(comment_ranking)}ユーザー")
@@ -334,7 +335,23 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         .chat-avatar {{ width: 50px; height: 50px; border-radius: 50%; }}
         .chat-bubble {{ background: #e3f2fd; padding: 10px 15px; border-radius: 15px; max-width: 70%; }}
         .ranking-list {{ list-style: none; padding: 0; }}
-        .ranking-item {{ background: white; margin: 10px 0; padding: 15px; border-radius: 5px; border-left: 4px solid #007cba; }}
+        .ranking-item {{
+            background: white;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #007cba; /* デフォルト色（青） */
+        }}
+        /* 1〜3位だけ色変更 */
+        .rank-1 {{
+            border-left-color: gold;       /* 金メダル風 */
+        }}
+        .rank-2 {{
+            border-left-color: silver;     /* 銀メダル風 */
+        }}
+        .rank-3 {{
+            border-left-color: #cd7f32;    /* ブロンズ */
+        }}
         .word-list {{ display: flex; flex-wrap: wrap; gap: 10px; }}
         .word-item {{ background: #007cba; color: white; padding: 5px 10px; border-radius: 15px; }}
         .summary-section {{
@@ -497,6 +514,9 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         .flip-horizontal {{
             transform: scaleX(-1);
         }}
+        .section {{
+            margin-bottom: 100px;
+        }}
     </style>
 </head>
 <body>
@@ -586,45 +606,66 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         """)
             html_parts.append("    </div>\n</div>\n")
 
-        # コメントランキング（generate_complete_html関数内）
+        # コメントランキング部分の修正版
         if comment_ranking:
             html_parts.append("""
-            <div class="section">
-                <h2>🏆 コメントランキング</h2>
-                <ul class="ranking-list">
-        """)
+                    <div class="section">
+                        <h2>🏆 コメントランキング</h2>
+                        <ul class="ranking-list">
+                    """)
             for user in comment_ranking:
-                user_display = f'<a href="{user["user_url"]}" target="_blank">{user["user_name"]}</a>' if user['user_url'] else user['user_name']
+                # ランク別のクラスと見た目設定
+                rank_class_map = {
+                    1: ("rank-1", 60, "1.4em"),
+                    2: ("rank-2", 45, "1.2em"),
+                    3: ("rank-3", 36, "1.1em"),
+                }
+                rank_class, img_size, font_size = rank_class_map.get(user['rank'], ("rank-other", 30, "1em"))
+
+                user_display = (
+                    f'<a href="{user["user_url"]}" target="_blank">{user["user_name"]}</a>'
+                    if user['user_url'] else user['user_name']
+                )
+
                 html_parts.append(f"""
-                    <li class="ranking-item">
-                        <div class="ranking-header">
-                            <strong>{user['rank']}位:</strong>
-                            <img src="{user['icon_url']}" style="width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; margin: 0 5px;" onerror="this.style.display='none'">
-                            {user_display} - {user['comment_count']}コメント
-                            <button class="toggle-comments-btn" data-user-id="{user['user_id']}" style="margin-left: 10px; padding: 3px 8px; background: #007cba; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8em;">
-                                全コメント表示
-                            </button>
-                        </div>
-                        <div class="ranking-summary">
-                            <small>初コメント ({user['first_comment_time']}): {user['first_comment']}</small><br>
-                            <small>最終コメント ({user['last_comment_time']}): {user['last_comment']}</small>
-                        </div>
-                        <div class="user-comments" id="comments-{user['user_id']}" style="display: none; margin-top: 10px; max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px;">
-        """)
-            # 全コメントを表示
-            for comment in user['all_comments']:
-                html_parts.append(f"""
-                        <div class="comment-entry" style="margin: 5px 0; padding: 5px; border-bottom: 1px dotted #ccc;">
-                            <span style="color: #666; font-size: 0.8em;">[{comment['time']}]</span>
-                            <span style="margin-left: 5px;">{comment['text']}</span>
-                        </div>
-    """)
-            
+                        <li class="ranking-item {rank_class}">
+                            <div class="ranking-header" style="font-size:{font_size};">
+                                <strong>{user['rank']}位:</strong>
+                                <img src="{user['icon_url']}"
+                                    style="width:{img_size}px; height:{img_size}px; border-radius:50%; vertical-align:middle; margin:0 5px;"
+                                    onerror="this.onerror=null; this.src='https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/defaults/blank.jpg';">
+                                {user_display} - {user['comment_count']}コメント
+                                <button class="toggle-comments-btn" data-user-id="{user['user_id']}"
+                                    style="margin-left:10px; padding:3px 8px; background:#007cba; color:white; border:none; border-radius:3px; cursor:pointer; font-size:0.8em;">
+                                    全コメント表示
+                                </button>
+                            </div>
+                            <div class="ranking-summary">
+                                <small>初コメント ({user['first_comment_time']}): {user['first_comment']}</small><br>
+                                <small>最終コメント ({user['last_comment_time']}): {user['last_comment']}</small>
+                            </div>
+                            <div class="user-comments" id="comments-{user['user_id']}"
+                                style="display:none; margin-top:10px; max-height:300px; overflow-y:auto; background:#f8f9fa; padding:10px; border-radius:5px;">
+                        """)
+
+                # ユーザーの全コメントを表示
+                for comment in user.get('comments', []):
+                    html_parts.append(f"""
+                                <div class="comment-entry" style="margin: 5px 0; padding: 5px; border-bottom: 1px dotted #ccc;">
+                                    <span style="color: #666; font-size: 0.8em;">[{comment['time']}]</span>
+                                    <span style="margin-left: 5px;">{comment['text']}</span>
+                                </div>
+                            """)
+
+                html_parts.append("""
+                            </div>
+                        </li>
+                        """)
+
             html_parts.append("""
+                        </ul>
                     </div>
-                </li>
-    """)
-        html_parts.append("        </ul>\n    </div>\n")
+                    """)
 
         # 要約セクション
         html_parts.append(f"""
@@ -759,10 +800,13 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
                     html_parts.append(f"""
                             <p class="comment-item">
                                 {comment['index']} | {comment['time']} - {user_display} :
-                                <img src="{comment['icon_url']}" style="width: 20px; height: 20px; vertical-align: middle; margin-left: 5px;" onerror="this.style.display='none'">
+                                <img src="{comment['icon_url']}"
+                                    style="width: 20px; height: 20px; vertical-align: middle; margin-left: 5px;"
+                                    onerror="this.onerror=null; this.src='https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/defaults/blank.jpg';">
                                 {comment['text']}<br>
                             </p>
-        """)
+                    """)
+
             else:
                 # コメントがない場合
                 html_parts.append("""

@@ -173,6 +173,26 @@ class UserConfigWindow:
         beam_spin = tk.Spinbox(audio_frame, from_=1, to=10, textvariable=self.beam_size_var, width=10)
         beam_spin.pack(anchor=tk.W, padx=5, pady=2)
 
+        # 音楽設定セクション
+        music_frame = tk.LabelFrame(scrollable_frame, text="音楽生成設定")
+        music_frame.pack(fill=tk.X, pady=5)
+
+        # 曲調設定
+        tk.Label(music_frame, text="音楽スタイル:").pack(anchor=tk.W, pady=(5, 0))
+        self.music_style_var = tk.StringVar(value="J-Pop, Upbeat")
+        tk.Entry(music_frame, textvariable=self.music_style_var, width=60).pack(fill=tk.X, padx=5, pady=2)
+
+        # モデル選択
+        tk.Label(music_frame, text="モデル:").pack(anchor=tk.W, pady=(10, 0))
+        self.music_model_var = tk.StringVar(value="V4")
+        music_model_combo = ttk.Combobox(music_frame, textvariable=self.music_model_var,
+                                        values=["V4", "V3"], state="readonly", width=20)
+        music_model_combo.pack(anchor=tk.W, padx=5, pady=2)
+
+        # ボーカル有無
+        self.music_instrumental_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(music_frame, text="インストゥルメンタル（歌なし）", 
+                    variable=self.music_instrumental_var).pack(anchor=tk.W, padx=5, pady=5)
 
         # プロンプト設定
         prompt_frame = tk.LabelFrame(scrollable_frame, text="AIプロンプト設定")
@@ -640,6 +660,12 @@ class UserConfigWindow:
                 "enable_ai_music": self.ai_music_var.get(),
                 "enable_ai_conversation": self.ai_conversation_var.get()
             },
+            "music_settings": {
+                "style": self.music_style_var.get(),
+                "model": self.music_model_var.get(),
+                "instrumental": self.music_instrumental_var.get()
+            },
+
             "ai_prompts": {
                 "summary_prompt": self.summary_prompt_var.get(),
                 "intro_conversation_prompt": self.intro_conversation_prompt_var.get(),

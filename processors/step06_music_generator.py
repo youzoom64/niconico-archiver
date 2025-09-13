@@ -40,11 +40,16 @@ def process(pipeline_data):
             return {"music_generated": False, "reason": "no_api_key"}
         
         # 6. 音楽生成
+        music_settings = config.get("music_settings", {})
         music_result = generate_music_from_summary(
             broadcast_data.get('live_title', 'タイトル不明'),
             summary_text,
-            suno_api_key
+            suno_api_key,
+            style=music_settings.get("style", "J-Pop, Upbeat"),
+            model=music_settings.get("model", "V4"),
+            instrumental=music_settings.get("instrumental", False)
         )
+
         
         if music_result:
             # 7. 統合JSONに結果を追加
@@ -75,7 +80,7 @@ def save_broadcast_data(broadcast_dir, lv_value, broadcast_data):
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(broadcast_data, f, ensure_ascii=False, indent=2)
 
-def generate_music_from_summary(title, summary, api_key):
+def generate_music_from_summary(title, summary, api_key, style="J-Pop", model="V4", instrumental=False):
     """要約から音楽を生成"""
     try:
         print(f"音楽生成開始: {title}")
@@ -90,9 +95,9 @@ def generate_music_from_summary(title, summary, api_key):
         result = suno_api.generate_music(
             prompt=lyrics,
             custom_mode=True,
-            instrumental=False,
-            model="V4",
-            style="J-Pop, Ballad",
+            instrumental=instrumental,  # ← ここも引数で受け取った値を使用
+            model=model,                # ← ここも引数で受け取った値を使用
+            style=style,                # ← ここも引数で受け取った値を使用
             title=title
         )
         
@@ -103,7 +108,12 @@ def generate_music_from_summary(title, summary, api_key):
                 "music_prompt": lyrics,
                 "generated_at": datetime.now().isoformat(),
                 "title": title,
-                "status": result.get("status", "generated")
+                "status": result.get("status", "generated"),
+                "settings": {          # 生成時の設定を記録
+                    "style": style,
+                    "model": model,
+                    "instrumental": instrumental
+                }
             }
         
         return None
@@ -111,6 +121,7 @@ def generate_music_from_summary(title, summary, api_key):
     except Exception as e:
         print(f"音楽生成エラー: {str(e)}")
         return None
+
 
 def create_music_prompt(summary):
     """要約テキストを歌詞として使用（V4は最大3000文字）"""
