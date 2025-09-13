@@ -16,7 +16,33 @@ class UserConfigWindow:
         self.current_config = None
         self.setup_ui()
         self.load_users()
-        
+
+    def sync_tree_to_memory(self):
+        """TreeViewの内容をメモリ(_tree_user_data)に反映"""
+        if not hasattr(self, '_tree_user_data'):
+            self._tree_user_data = {}
+
+        for item in self.special_users_tree.get_children():
+            user_id = self.special_users_tree.item(item)["text"]
+            values = self.special_users_tree.item(item)["values"]
+
+            if user_id not in self._tree_user_data:
+                self._tree_user_data[user_id] = {}
+
+            self._tree_user_data[user_id].update({
+                "user_id": user_id,
+                "display_name": values[0] if len(values) > 0 else "",
+                "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
+                "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
+                "template": values[3] if len(values) > 3 else "user_detail.html",
+                "analysis_prompt": self._tree_user_data[user_id].get(
+                    "analysis_prompt",
+                    self.default_analysis_prompt_text.get(1.0, tk.END).strip()
+                ),
+                "description": self._tree_user_data[user_id].get("description", ""),
+                "tags": self._tree_user_data[user_id].get("tags", [])
+            })
+
     def setup_ui(self):
         main_frame = tk.Frame(self.window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -741,6 +767,7 @@ class UserConfigWindow:
         """設定保存時に詳細ユーザー設定も含める"""
         print("=== 保存処理開始 ===")
         print(f"_tree_user_data: {list(getattr(self, '_tree_user_data', {}).keys())}")
+        self.sync_tree_to_memory()  # ← ★これを追加
         
         config = self.get_current_config()
         account_id = config["account_id"]
@@ -855,44 +882,49 @@ class UserConfigWindow:
         if not selection:
             messagebox.showwarning("警告", "編集するユーザーを選択してください")
             return
-        
+
         item = self.special_users_tree.item(selection[0])
         user_id = item["text"]
-        
+
         # 既存の設定を取得
         current_config = self.get_special_user_config(user_id)
-        
+
         dialog = SpecialUserConfigDialog(
-            self.window, 
+            self.window,
             current_config,
             self.default_analysis_ai_model_var.get(),
             self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
             self.default_template_var.get(),
             self.default_analysis_enabled_var.get()
         )
-        
+
         if dialog.result:
             user_config = dialog.result
             new_user_id = user_config["user_id"]
-            
-            # メモリ上のデータを更新
+
+            # ★ ここで _tree_user_data を完全更新
             if not hasattr(self, '_tree_user_data'):
                 self._tree_user_data = {}
-            
-            # 古いIDのデータを削除し、新しいIDで保存
+
             if user_id != new_user_id and user_id in self._tree_user_data:
                 del self._tree_user_data[user_id]
-            self._tree_user_data[new_user_id] = user_config
-            
-            # TreeViewを更新
-            self.special_users_tree.item(selection[0], 
-                                    text=new_user_id,
-                                    values=(user_config["display_name"],
-                                            user_config["analysis_ai_model"],
-                                            "有効" if user_config["analysis_enabled"] else "無効",
-                                            user_config["template"]))
-            
+
+            self._tree_user_data[new_user_id] = user_config  # ← ダイアログ結果をそのまま格納
+
+            # TreeViewを更新（表示用データだけ反映）
+            self.special_users_tree.item(
+                selection[0],
+                text=new_user_id,
+                values=(
+                    user_config["display_name"],
+                    user_config["analysis_ai_model"],
+                    "有効" if user_config["analysis_enabled"] else "無効",
+                    user_config["template"]
+                )
+            )
+
             print(f"スペシャルユーザー編集・保存完了: {user_id} -> {new_user_id}")
+
 
     def remove_special_user(self):
         """選択されたスペシャルユーザーを削除"""
