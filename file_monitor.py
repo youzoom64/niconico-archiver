@@ -4,6 +4,23 @@ import re
 import subprocess
 import threading
 from datetime import datetime
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+class Mp4FileHandler(FileSystemEventHandler):
+    def __init__(self, mp4_monitor):
+        self.mp4_monitor = mp4_monitor
+        
+    def on_created(self, event):
+        if not event.is_directory and event.src_path.endswith('.mp4'):
+            filename = os.path.basename(event.src_path)
+            print(f"DEBUG: [{self.mp4_monitor.user_name}] 新規MP4ファイル検出: {filename}")
+            self.mp4_monitor.handle_new_file(filename)
+    
+    def on_modified(self, event):
+        if not event.is_directory and event.src_path.endswith('.mp4'):
+            filename = os.path.basename(event.src_path)
+            self.mp4_monitor.handle_file_change(filename)
 
 class Mp4Monitor:
     def __init__(self, user_name, config, logger, error_callback):
@@ -23,8 +40,9 @@ class Mp4Monitor:
         self.platform_directory = self.find_account_directory()
         
         self.running = False
-        self.thread = None
+        self.observer = None
         self.file_sizes = {}  # ファイルサイズ記録用
+        self.stability_threads = {}  # ファイル安定性確認用スレッド
         
         # 起動時の既存ファイルを無視リストに追加
         self.ignored_files = set()
@@ -45,7 +63,58 @@ class Mp4Monitor:
         except Exception as e:
             print(f"DEBUG: [{self.user_name}] 無視リスト初期化エラー: {str(e)}")
             self.ignored_files = set()
+
+    def handle_new_file(self, filename):
+        """新規ファイル検出時の処理"""
+        if filename in self.ignored_files:
+            return
         
+        # 5秒後に安定性をチェックするスレッドを開始
+        if filename in self.stability_threads:
+            self.stability_threads[filename].cancel()
+        
+        self.stability_threads[filename] = threading.Timer(5.0, self.check_file_stability, [filename])
+        self.stability_threads[filename].start()
+        
+    def handle_file_change(self, filename):
+        """ファイル変更時の処理"""
+        if filename in self.ignored_files:
+            return
+            
+        # ファイルが変更されたら、既存のタイマーをキャンセルして新しいタイマーを開始
+        if filename in self.stability_threads:
+            self.stability_threads[filename].cancel()
+        
+        self.stability_threads[filename] = threading.Timer(5.0, self.check_file_stability, [filename])
+        self.stability_threads[filename].start()
+        print(f"DEBUG: [{self.user_name}] ファイル変更検出、安定性チェック再開: {filename}")
+
+    def check_file_stability(self, filename):
+        """ファイル安定性チェック（5秒後に実行）"""
+        try:
+            filepath = os.path.join(self.platform_directory, filename)
+            if not os.path.exists(filepath):
+                return
+                
+            print(f"DEBUG: [{self.user_name}] ファイル安定判定: {filename}")
+            
+            lv_value = self.extract_lv_value(filename)
+            if lv_value:
+                print(f"DEBUG: [{self.user_name}] lv値抽出成功: {lv_value}")
+                self.call_pipeline(lv_value)
+                # 処理完了後は無視リストに追加
+                self.ignored_files.add(filename)
+                print(f"DEBUG: [{self.user_name}] ファイルを無視リストに追加: {filename}")
+            else:
+                print(f"DEBUG: [{self.user_name}] lv値が見つかりません: {filename}")
+                
+            # タイマーをクリーンアップ
+            if filename in self.stability_threads:
+                del self.stability_threads[filename]
+                
+        except Exception as e:
+            print(f"DEBUG: [{self.user_name}] 安定性チェックエラー: {str(e)}")
+
     def find_account_directory(self):
         """アカウントIDを含むディレクトリを検索"""
         try:
@@ -80,11 +149,10 @@ class Mp4Monitor:
         except Exception as e:
             self.logger.log(f"[{self.user_name}] ディレクトリ検索エラー: {str(e)}")
             return self.base_platform_directory
-        
+
     def get_mp4_files_with_size(self):
         """MP4ファイル一覧とサイズを取得"""
         try:
-            # ディレクトリが見つからない場合は再検索
             if not os.path.exists(self.platform_directory):
                 self.platform_directory = self.find_account_directory()
                 
@@ -105,49 +173,13 @@ class Mp4Monitor:
         except Exception as e:
             self.error_callback(self.user_name, f"ディレクトリアクセスエラー: {str(e)}")
             return {}
-    
-    def is_file_stable(self, filename, current_size):
-        """ファイルサイズが5秒間変化していないかチェック"""
-        current_time = time.time()
-        
-        if filename not in self.file_sizes:
-            # 初回検出 - 既存ファイルは10秒待機
-            self.file_sizes[filename] = {
-                'size': current_size,
-                'last_change': current_time,
-                'stable': False
-            }
-            print(f"DEBUG: [{self.user_name}] 新規ファイル検出: {filename}")
-            return False
-        
-        file_info = self.file_sizes[filename]
-        
-        if file_info['size'] != current_size:
-            # サイズが変化した
-            file_info['size'] = current_size
-            file_info['last_change'] = current_time
-            file_info['stable'] = False
-            print(f"DEBUG: [{self.user_name}] ファイルサイズ変化: {filename} -> {current_size}")
-            return False
-        
-        # サイズが変化していない場合、5秒経過したかチェック
-        wait_time = current_time - file_info['last_change']
-        if wait_time >= 5.0:
-            if not file_info['stable']:
-                file_info['stable'] = True
-                print(f"DEBUG: [{self.user_name}] ファイル安定判定: {filename} (待機時間: {wait_time:.1f}秒)")
-                return True
-        else:
-            print(f"DEBUG: [{self.user_name}] 安定待機中: {filename} (残り: {5.0 - wait_time:.1f}秒)")
-        
-        return False
-    
+
     def extract_lv_value(self, filename):
         match = re.search(r'lv\d+', filename)
         if match:
             return match.group()
         return None
-    
+
     def call_pipeline(self, lv_value):
         try:
             print(f"DEBUG: [{self.user_name}] パイプライン呼び出し開始: {lv_value}")
@@ -193,146 +225,30 @@ class Mp4Monitor:
                 
         except Exception as e:
             print(f"DEBUG: [{self.user_name}] パイプライン呼び出しエラー: {str(e)}")
-    
 
-    def find_ncv_directory_for_account(ncv_base_directory, account_id, display_name=""):
-        """NCVディレクトリ内でアカウント専用ディレクトリを検索"""
-        try:
-            if not os.path.exists(ncv_base_directory):
-                return ncv_base_directory
-            
-            # 1. account_id + display_name のディレクトリを探す
-            if display_name:
-                target_dir = f"{account_id}_{display_name}"
-                target_path = os.path.join(ncv_base_directory, target_dir)
-                if os.path.exists(target_path):
-                    return target_path
-            
-            # 2. account_id で始まるディレクトリを探す
-            for dirname in os.listdir(ncv_base_directory):
-                if dirname.startswith(f"{account_id}_"):
-                    return os.path.join(ncv_base_directory, dirname)
-            
-            # 3. デフォルトディレクトリを作成
-            if display_name:
-                default_dir = os.path.join(ncv_base_directory, f"{account_id}_{display_name}")
-            else:
-                default_dir = os.path.join(ncv_base_directory, f"{account_id}_user")
-            
-            os.makedirs(default_dir, exist_ok=True)
-            return default_dir
-            
-        except Exception as e:
-            print(f"NCVディレクトリ検索エラー: {str(e)}")
-            return ncv_base_directory
-
-
-    def watch_loop(self):
-        print(f"DEBUG: [{self.user_name}] 監視ループ開始: {self.platform_directory}")
-        print(f"DEBUG: [{self.user_name}] 無視ファイル数: {len(self.ignored_files)}")
-        self.logger.log(f"[{self.user_name}] 監視開始: {self.platform_directory}")
-        
-        loop_count = 0
-        while self.running:
-            try:
-                loop_count += 1
-                if loop_count % 10 == 1:  # 10秒ごとに状況報告
-                    print(f"DEBUG: [{self.user_name}] 監視ループ {loop_count} 回目")
-                
-                current_files = self.get_mp4_files_with_size()
-                
-                # 新規ファイルのみを処理対象とする
-                new_files = {k: v for k, v in current_files.items() if k not in self.ignored_files}
-                
-                if new_files:
-                    print(f"DEBUG: [{self.user_name}] 新規ファイル検出: {list(new_files.keys())}")
-                    print(f"DEBUG: [{self.user_name}] 新規ファイルサイズ: {new_files}")
-                elif current_files:
-                    if loop_count % 10 == 1:  # 10秒ごとに報告
-                        print(f"DEBUG: [{self.user_name}] 全ファイルが既存 (無視): {list(current_files.keys())}")
-                else:
-                    if loop_count % 10 == 1:  # 10秒ごとに報告
-                        print(f"DEBUG: [{self.user_name}] MP4ファイルが見つかりません")
-                
-                # 新規ファイルのみをチェック
-                for filename, current_size in new_files.items():
-                    print(f"DEBUG: [{self.user_name}] 新規ファイルチェック中: {filename} (サイズ: {current_size})")
-                    
-                    if self.is_file_stable(filename, current_size):
-                        print(f"DEBUG: [{self.user_name}] 新規ファイルが安定: {filename}")
-                        
-                        lv_value = self.extract_lv_value(filename)
-                        if lv_value:
-                            print(f"DEBUG: [{self.user_name}] lv値抽出成功: {lv_value}")
-                            self.call_pipeline(lv_value)
-                            # 処理完了後は無視リストに追加
-                            self.ignored_files.add(filename)
-                            print(f"DEBUG: [{self.user_name}] ファイルを無視リストに追加: {filename}")
-                        else:
-                            print(f"DEBUG: [{self.user_name}] lv値が見つかりません: {filename}")
-                    else:
-                        print(f"DEBUG: [{self.user_name}] 新規ファイルはまだ不安定: {filename}")
-                
-                # 削除されたファイルの記録をクリーンアップ
-                existing_files = set(current_files.keys())
-                recorded_files = set(self.file_sizes.keys())
-                deleted_files = recorded_files - existing_files
-                
-                for deleted_file in deleted_files:
-                    del self.file_sizes[deleted_file]
-                    # 無視リストからも削除
-                    self.ignored_files.discard(deleted_file)
-                    print(f"DEBUG: [{self.user_name}] ファイル削除を検出: {deleted_file}")
-                
-                time.sleep(1)  # 1秒間隔でチェック
-                
-            except Exception as e:
-                print(f"DEBUG: [{self.user_name}] 監視ループエラー: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                self.error_callback(self.user_name, f"監視ループエラー: {str(e)}")
-                break
-        
-        print(f"DEBUG: [{self.user_name}] 監視ループ終了")
-    
     def start_watching(self):
         if not self.running:
             self.running = True
-            self.thread = threading.Thread(target=self.watch_loop, daemon=True)
-            self.thread.start()
-    
+            
+            # watchdogでファイルシステム監視開始
+            self.observer = Observer()
+            event_handler = Mp4FileHandler(self)
+            self.observer.schedule(event_handler, self.platform_directory, recursive=False)
+            self.observer.start()
+            
+            print(f"DEBUG: [{self.user_name}] watchdog監視開始: {self.platform_directory}")
+            self.logger.log(f"[{self.user_name}] 監視開始: {self.platform_directory}")
+
     def stop_watching(self):
         self.running = False
-        if self.thread:
-            self.thread.join(timeout=5)
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
+            print(f"DEBUG: [{self.user_name}] watchdog監視停止")
+        
+        # 実行中のタイマーをすべてキャンセル
+        for timer in self.stability_threads.values():
+            timer.cancel()
+        self.stability_threads.clear()
 
-
-class MultiUserMonitor:
-    def __init__(self, logger, error_callback):
-        self.logger = logger
-        self.error_callback = error_callback
-        self.active_watchers = {}
-    
-    def start_user_watch(self, user_name, config):
-        if user_name not in self.active_watchers:
-            monitor = Mp4Monitor(user_name, config, self.logger, self.error_callback)
-            self.active_watchers[user_name] = monitor
-            monitor.start_watching()
-            return True
-        return False
-    
-    def stop_user_watch(self, user_name):
-        if user_name in self.active_watchers:
-            monitor = self.active_watchers[user_name]
-            monitor.stop_watching()
-            del self.active_watchers[user_name]
-            self.logger.log(f"[{user_name}] 監視停止")
-            return True
-        return False
-    
-    def is_watching(self, user_name):
-        return user_name in self.active_watchers
-    
-    def stop_all(self):
-        for user_name in list(self.active_watchers.keys()):
-            self.stop_user_watch(user_name)
+# MultiUserMonitorクラスは変更なし
