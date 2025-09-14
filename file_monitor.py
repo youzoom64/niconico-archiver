@@ -252,3 +252,32 @@ class Mp4Monitor:
         self.stability_threads.clear()
 
 # MultiUserMonitorクラスは変更なし
+class MultiUserMonitor:
+    def __init__(self, logger, error_callback):
+        self.logger = logger
+        self.error_callback = error_callback
+        self.active_watchers = {}
+    
+    def start_user_watch(self, user_name, config):
+        if user_name not in self.active_watchers:
+            monitor = Mp4Monitor(user_name, config, self.logger, self.error_callback)
+            self.active_watchers[user_name] = monitor
+            monitor.start_watching()
+            return True
+        return False
+    
+    def stop_user_watch(self, user_name):
+        if user_name in self.active_watchers:
+            monitor = self.active_watchers[user_name]
+            monitor.stop_watching()
+            del self.active_watchers[user_name]
+            self.logger.log(f"[{user_name}] 監視停止")
+            return True
+        return False
+    
+    def is_watching(self, user_name):
+        return user_name in self.active_watchers
+    
+    def stop_all(self):
+        for user_name in list(self.active_watchers.keys()):
+            self.stop_user_watch(user_name)
