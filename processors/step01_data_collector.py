@@ -18,6 +18,10 @@ def process(pipeline_data):
         account_id = pipeline_data['account_id']
         platform_directory = pipeline_data['platform_directory']
         ncv_directory = pipeline_data['ncv_directory']
+        config = pipeline_data.get('config', {})
+        
+        # display_nameを取得
+        display_name = config.get('display_name', '')
         
         print(f"Step01 開始: {lv_value}")
         
@@ -29,12 +33,12 @@ def process(pipeline_data):
         # 2. 元URLのHTML取得・保存とbeginTime抽出
         html_content, begin_time = fetch_and_save_html(lv_value, broadcast_dir)
         
-        # 3. NCVのXMLファイル監視・解析
-        ncv_xml_path, ncv_data = wait_and_parse_ncv_xml(ncv_directory, lv_value)
-        
-        # 4. 監視ディレクトリのXMLからserver_time取得
-        platform_xml_path, server_time = get_server_time_from_xml(platform_directory, lv_value, account_id)
-        
+        # 3. NCVのXMLファイル監視・解析（新しい構造対応）
+        ncv_xml_path, ncv_data = wait_and_parse_ncv_xml(ncv_directory, lv_value, account_id, display_name)
+
+        # 4. 動画ファイル名からserver_time取得  
+        platform_xml_path, server_time = get_server_time_from_filename(platform_directory, account_id, lv_value)
+                
         # 5. 動画時間情報取得
         video_duration = get_video_duration(pipeline_data)
         
@@ -53,6 +57,40 @@ def process(pipeline_data):
     except Exception as e:
         print(f"Step01 エラー: {str(e)}")
         raise
+
+def get_server_time_from_filename(platform_directory, account_id, lv_value):
+    """動画ファイル名からserver_time取得"""
+    try:
+        account_dir = find_account_directory(platform_directory, account_id)
+        
+        # 対象の動画ファイルを検索
+        for filename in os.listdir(account_dir):
+            if filename.endswith('.mp4') and lv_value in filename:
+                # ファイル名からタイムスタンプ抽出
+                pattern = r'lv\d+_(\d{4})_(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_'
+                match = re.search(pattern, filename)
+                
+                if match:
+                    year = int(match.group(1))
+                    month = int(match.group(2))
+                    day = int(match.group(3))
+                    hour = int(match.group(4))
+                    minute = int(match.group(5))
+                    second = int(match.group(6))
+                    
+                    dt = datetime(year, month, day, hour, minute, second)
+                    server_time = str(int(dt.timestamp()))
+                    
+                    print(f"動画ファイル名からserver_time取得: {server_time}")
+                    return "", server_time
+        
+        print(f"対象の動画ファイルが見つかりません: {lv_value}")
+        return "", ""
+        
+    except Exception as e:
+        print(f"ファイル名からserver_time取得エラー: {str(e)}")
+        return "", ""
+
 
 def fetch_and_save_html(lv_value, broadcast_dir):
     """元URLのHTML取得・保存とbeginTime抽出"""
@@ -108,14 +146,22 @@ def extract_begin_time(html_content):
         print(f"beginTime抽出エラー: {str(e)}")
         return None
 
-def wait_and_parse_ncv_xml(ncv_directory, lv_value):
-    """NCVのXMLファイル監視・解析（ファイル名部分一致対応）"""
+def wait_and_parse_ncv_xml(ncv_directory, lv_value, account_id="", display_name=""):
+    """NCVのXMLファイル監視・解析（新しいディレクトリ構造対応）"""
+    
+    # 新しいディレクトリ構造を考慮
+    if account_id:
+        from utils import find_ncv_directory
+        actual_ncv_dir = find_ncv_directory(ncv_directory, account_id, display_name)
+    else:
+        actual_ncv_dir = ncv_directory
+    
     for i in range(60):
         try:
-            xml_file = find_xml_file_containing_lv(ncv_directory, lv_value)
+            xml_file = find_xml_file_containing_lv(actual_ncv_dir, lv_value)
             if xml_file:
                 ncv_data = parse_ncv_xml(xml_file)
-                return xml_file, ncv_data  # パスとデータの両方を返す
+                return xml_file, ncv_data
         except Exception as e:
             print(f"XML解析エラー(試行{i+1}): {str(e)}")
         time.sleep(1)
