@@ -230,14 +230,29 @@ class Mp4Monitor:
         if not self.running:
             self.running = True
             
+            # ディレクトリが存在しない場合は作成
+            if not os.path.exists(self.platform_directory):
+                print(f"DEBUG: [{self.user_name}] 監視ディレクトリが存在しないため作成: {self.platform_directory}")
+                try:
+                    os.makedirs(self.platform_directory, exist_ok=True)
+                except Exception as e:
+                    print(f"DEBUG: [{self.user_name}] ディレクトリ作成エラー: {str(e)}")
+                    self.logger.log(f"[{self.user_name}] 監視開始失敗: ディレクトリ作成エラー")
+                    return
+            
             # watchdogでファイルシステム監視開始
             self.observer = Observer()
             event_handler = Mp4FileHandler(self)
             self.observer.schedule(event_handler, self.platform_directory, recursive=False)
-            self.observer.start()
             
-            print(f"DEBUG: [{self.user_name}] watchdog監視開始: {self.platform_directory}")
-            self.logger.log(f"[{self.user_name}] 監視開始: {self.platform_directory}")
+            try:
+                self.observer.start()
+                print(f"DEBUG: [{self.user_name}] watchdog監視開始: {self.platform_directory}")
+                self.logger.log(f"[{self.user_name}] 監視開始: {self.platform_directory}")
+            except Exception as e:
+                print(f"DEBUG: [{self.user_name}] watchdog開始エラー: {str(e)}")
+                self.logger.log(f"[{self.user_name}] 監視開始失敗: {str(e)}")
+                self.running = False
 
     def stop_watching(self):
         self.running = False
