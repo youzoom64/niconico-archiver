@@ -18,30 +18,38 @@ class UserConfigWindow:
         self.load_users()
 
     def sync_tree_to_memory(self):
-        """TreeViewの内容をメモリ(_tree_user_data)に反映"""
+        """TreeViewの内容をメモリ(_tree_user_data)に反映 - 既存データを保持"""
         if not hasattr(self, '_tree_user_data'):
             self._tree_user_data = {}
 
+        print("=== sync_tree_to_memory 開始 ===")
+        
+        # TreeViewの現在の表示データで基本情報のみ更新（詳細データは保持）
+        tree_user_ids = set()
         for item in self.special_users_tree.get_children():
             user_id = self.special_users_tree.item(item)["text"]
             values = self.special_users_tree.item(item)["values"]
+            tree_user_ids.add(user_id)
 
-            if user_id not in self._tree_user_data:
-                self._tree_user_data[user_id] = {}
+            if user_id in self._tree_user_data:
+                # 既存データがある場合は表示項目のみ更新
+                self._tree_user_data[user_id].update({
+                    "display_name": values[0] if len(values) > 0 else "",
+                    "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
+                    "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
+                    "template": values[3] if len(values) > 3 else "user_detail.html"
+                })
+                print(f"既存データ更新: {user_id}")
+            else:
+                print(f"警告: {user_id} の詳細データが見つかりません - 追加処理が必要")
 
-            self._tree_user_data[user_id].update({
-                "user_id": user_id,
-                "display_name": values[0] if len(values) > 0 else "",
-                "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
-                "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
-                "template": values[3] if len(values) > 3 else "user_detail.html",
-                "analysis_prompt": self._tree_user_data[user_id].get(
-                    "analysis_prompt",
-                    self.default_analysis_prompt_text.get(1.0, tk.END).strip()
-                ),
-                "description": self._tree_user_data[user_id].get("description", ""),
-                "tags": self._tree_user_data[user_id].get("tags", [])
-            })
+        # TreeViewから削除されたユーザーをメモリからも削除
+        users_to_remove = set(self._tree_user_data.keys()) - tree_user_ids
+        for user_id in users_to_remove:
+            del self._tree_user_data[user_id]
+            print(f"削除されたユーザーをメモリからも削除: {user_id}")
+        
+        print("=== sync_tree_to_memory 完了 ===")
 
     def setup_ui(self):
         main_frame = tk.Frame(self.window)
@@ -726,56 +734,51 @@ class UserConfigWindow:
                 "users": self.get_special_users_from_tree()
             }
         }
-    
+        
     def get_special_users_from_tree(self):
         """TreeViewからスペシャルユーザー設定を取得"""
         users_config = {}
         
-        # _tree_user_dataの初期化
         if not hasattr(self, '_tree_user_data'):
             self._tree_user_data = {}
+            print("警告: _tree_user_data が初期化されていません")
+            return users_config
         
         for item in self.special_users_tree.get_children():
             user_id = self.special_users_tree.item(item)["text"]
-            values = self.special_users_tree.item(item)["values"]
             
-            # メモリ上のデータがあれば使用、なければTreeViewから復元
             if user_id in self._tree_user_data:
                 users_config[user_id] = self._tree_user_data[user_id].copy()
-                print(f"メモリからデータ取得: {user_id}")
+                prompt_len = len(users_config[user_id].get('analysis_prompt', ''))
+                print(f"メモリからデータ取得: {user_id}, プロンプト長: {prompt_len}")
             else:
-                print(f"TreeViewからデータ復元: {user_id}")
-                # TreeViewの表示データから復元（continueしない）
-                users_config[user_id] = {
-                    "user_id": user_id,
-                    "display_name": values[0] if len(values) > 0 else "",
-                    "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
-                    "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
-                    "template": values[3] if len(values) > 3 else "user_detail.html",
-                    "analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
-                    "description": "",
-                    "tags": []
-                }
-                # 復元したデータをメモリにも保存
-                self._tree_user_data[user_id] = users_config[user_id].copy()
+                print(f"警告: {user_id} のメモリデータなし - スキップ")
         
         print(f"保存対象ユーザー数: {len(users_config)}")
         return users_config
 
-
     def save_config(self):
         """設定保存時に詳細ユーザー設定も含める"""
         print("=== 保存処理開始 ===")
-        print(f"_tree_user_data: {list(getattr(self, '_tree_user_data', {}).keys())}")
-        self.sync_tree_to_memory()  # ← ★これを追加
+        print(f"保存前メモリデータ: {list(getattr(self, '_tree_user_data', {}).keys())}")
+        
+        # メモリデータの詳細確認
+        if hasattr(self, '_tree_user_data'):
+            for user_id, user_data in self._tree_user_data.items():
+                prompt_len = len(user_data.get('analysis_prompt', ''))
+                prompt_preview = user_data.get('analysis_prompt', '')[:50] + "..." if prompt_len > 50 else user_data.get('analysis_prompt', '')
+                print(f"  {user_id}: プロンプト長={prompt_len}, 内容='{prompt_preview}'")
+        
+        self.sync_tree_to_memory()
         
         config = self.get_current_config()
         account_id = config["account_id"]
         
         special_users_config = config["special_users_config"]["users"]
-        print(f"保存対象ユーザー数: {len(special_users_config)}")
+        print(f"最終保存データ - ユーザー数: {len(special_users_config)}")
         for user_id, user_data in special_users_config.items():
-            print(f"  {user_id}: {user_data.get('display_name', 'NO_NAME')}")
+            prompt_len = len(user_data.get('analysis_prompt', ''))
+            print(f"  最終 {user_id}: プロンプト長={prompt_len}")
         
         if account_id:
             self.config_manager.save_user_config(account_id, config)
@@ -786,7 +789,6 @@ class UserConfigWindow:
             messagebox.showinfo("保存完了", f"アカウント {account_id} の設定を保存しました")
         else:
             messagebox.showerror("エラー", "アカウントIDを入力してください")
-
 
     def get_complete_special_users_from_tree(self):
         """TreeViewと_tree_user_dataから完全なユーザー設定を取得"""
@@ -834,7 +836,7 @@ class UserConfigWindow:
         # 新しいアイテムを追加
         for user_id, user_config in users_config.items():
             # メモリ上にデータを保存
-            self._tree_user_data[user_id] = user_config
+            self._tree_user_data[user_id] = user_config.copy()
             
             # TreeViewに表示
             self.special_users_tree.insert("", tk.END, text=user_id,
@@ -842,10 +844,11 @@ class UserConfigWindow:
                                                 user_config.get("analysis_ai_model", "openai-gpt4o"),
                                                 "有効" if user_config.get("analysis_enabled", True) else "無効",
                                                 user_config.get("template", "user_detail.html")))
+            
+            prompt_len = len(user_config.get("analysis_prompt", ""))
+            print(f"読み込み: {user_id}, プロンプト長: {prompt_len}")
         
         print(f"詳細ユーザー設定読み込み: {len(users_config)}件")
-        print(f"メモリデータ: {list(self._tree_user_data.keys())}")
-
 
     def add_special_user(self):
         """スペシャルユーザー追加ダイアログ"""
@@ -874,10 +877,12 @@ class UserConfigWindow:
                                                 "有効" if user_config["analysis_enabled"] else "無効",
                                                 user_config["template"]))
             
-            print(f"スペシャルユーザー追加: {user_id}")
+            print(f"スペシャルユーザー追加: {user_id}, プロンプト長: {len(user_config.get('analysis_prompt', ''))}")
 
     def edit_special_user(self):
         """選択されたスペシャルユーザーを編集"""
+        print("=== edit_special_user 開始 ===")
+        
         selection = self.special_users_tree.selection()
         if not selection:
             messagebox.showwarning("警告", "編集するユーザーを選択してください")
@@ -885,10 +890,12 @@ class UserConfigWindow:
 
         item = self.special_users_tree.item(selection[0])
         user_id = item["text"]
+        print(f"編集対象ユーザー: {user_id}")
 
         # 既存の設定を取得
         current_config = self.get_special_user_config(user_id)
-
+        print(f"編集前プロンプト長: {len(current_config.get('analysis_prompt', '')) if current_config else 0}")
+        
         dialog = SpecialUserConfigDialog(
             self.window,
             current_config,
@@ -898,20 +905,33 @@ class UserConfigWindow:
             self.default_analysis_enabled_var.get()
         )
 
+        print(f"ダイアログ完了 - 結果: {dialog.result is not None}")
+        
         if dialog.result:
             user_config = dialog.result
             new_user_id = user_config["user_id"]
+            
+            print(f"編集後プロンプト長: {len(user_config.get('analysis_prompt', ''))}")
+            print(f"編集後プロンプト内容（最初の100文字）: {user_config.get('analysis_prompt', '')[:100]}")
 
-            # ★ ここで _tree_user_data を完全更新
+            # メモリデータを完全に更新
             if not hasattr(self, '_tree_user_data'):
                 self._tree_user_data = {}
+                print("_tree_user_data を初期化")
 
+            print(f"更新前メモリデータ: {list(self._tree_user_data.keys())}")
+
+            # 古いIDのデータを削除（IDが変更された場合）
             if user_id != new_user_id and user_id in self._tree_user_data:
                 del self._tree_user_data[user_id]
+                print(f"古いID削除: {user_id}")
 
-            self._tree_user_data[new_user_id] = user_config  # ← ダイアログ結果をそのまま格納
+            # 新しいデータを完全に保存
+            self._tree_user_data[new_user_id] = user_config.copy()
+            print(f"メモリに保存: {new_user_id}")
+            print(f"保存後メモリ内プロンプト長: {len(self._tree_user_data[new_user_id].get('analysis_prompt', ''))}")
 
-            # TreeViewを更新（表示用データだけ反映）
+            # TreeViewの表示を更新
             self.special_users_tree.item(
                 selection[0],
                 text=new_user_id,
@@ -922,8 +942,34 @@ class UserConfigWindow:
                     user_config["template"]
                 )
             )
+            print("TreeView更新完了")
+        else:
+            print("ダイアログがキャンセルされました")
 
-            print(f"スペシャルユーザー編集・保存完了: {user_id} -> {new_user_id}")
+        print("=== edit_special_user 終了 ===")
+
+    def apply_current_special_user_changes(self):
+        """現在のスペシャルユーザー変更を即座に設定ファイルに反映"""
+        if not hasattr(self, 'current_config') or not self.current_config:
+            return
+        
+        # 現在の設定を取得して、スペシャルユーザー部分だけ更新
+        account_id = self.current_config["account_id"]
+        
+        # 既存の設定をベースに、スペシャルユーザー設定のみ更新
+        updated_config = self.current_config.copy()
+        
+        # special_users_configを更新
+        if "special_users_config" not in updated_config:
+            updated_config["special_users_config"] = {}
+        
+        updated_config["special_users_config"]["users"] = self.get_special_users_from_tree()
+        
+        # ファイルに保存
+        self.config_manager.save_user_config(account_id, updated_config)
+        print(f"スペシャルユーザー設定を即座に保存: {account_id}")
+
+
 
 
     def remove_special_user(self):
@@ -994,24 +1040,36 @@ class UserConfigWindow:
            
     def get_special_user_config(self, user_id):
         """TreeViewからユーザー設定を取得"""
+        print(f"=== get_special_user_config 開始: {user_id} ===")
+        
         if hasattr(self, '_tree_user_data') and user_id in self._tree_user_data:
-            return self._tree_user_data[user_id]
+            config = self._tree_user_data[user_id]
+            prompt_len = len(config.get('analysis_prompt', ''))
+            print(f"メモリからデータ取得: {user_id}, プロンプト長: {prompt_len}")
+            print(f"メモリ内プロンプト内容（最初の100文字）: {config.get('analysis_prompt', '')[:100]}")
+            return config
+        
+        print(f"メモリにデータなし: {user_id}")
+        print(f"現在のメモリキー: {list(getattr(self, '_tree_user_data', {}).keys())}")
         
         # TreeViewから基本データを取得
         for item in self.special_users_tree.get_children():
             if self.special_users_tree.item(item)["text"] == user_id:
                 values = self.special_users_tree.item(item)["values"]
-                return {
+                default_config = {
                     "user_id": user_id,
                     "display_name": values[0] if len(values) > 0 else "",
                     "analysis_ai_model": values[1] if len(values) > 1 else "openai-gpt4o",
                     "analysis_enabled": values[2] == "有効" if len(values) > 2 else True,
                     "template": values[3] if len(values) > 3 else "user_detail.html",
-                    "analysis_prompt": "",
+                    "analysis_prompt": self.default_analysis_prompt_text.get(1.0, tk.END).strip(),
                     "description": "",
                     "tags": []
                 }
+                print(f"TreeViewからデータ復元: {user_id}, デフォルトプロンプト長: {len(default_config['analysis_prompt'])}")
+                return default_config
         
+        print(f"ユーザーが見つかりません: {user_id}")
         return None
     
 class SpecialUserConfigDialog:
@@ -1022,6 +1080,8 @@ class SpecialUserConfigDialog:
         self.dialog.title("スペシャルユーザー設定")
         self.dialog.geometry("600x600")
         self.dialog.grab_set()
+        self.dialog.transient(parent)
+        self.dialog.protocol("WM_DELETE_WINDOW", self.cancel_clicked)
         
         # 設定項目
         main_frame = tk.Frame(self.dialog)
@@ -1080,6 +1140,9 @@ class SpecialUserConfigDialog:
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(4, weight=1)
         main_frame.rowconfigure(6, weight=1)
+        
+        # ★ これが必要！ダイアログが閉じられるまで待機
+        self.dialog.wait_window()
     
     def ok_clicked(self):
         user_id = self.user_id_var.get().strip()
@@ -1100,5 +1163,6 @@ class SpecialUserConfigDialog:
         self.dialog.destroy()
     
     def cancel_clicked(self):
+        self.result = None
         self.dialog.destroy()
 

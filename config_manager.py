@@ -146,8 +146,6 @@ class ConfigManager:
                     music_settings["instrumental"] = False
                 merged_config["music_settings"] = music_settings
 
-
-
                 # キャラクター設定の補完
                 ai_prompts = merged_config.get("ai_prompts", {})
                 if "character1_image_url" not in ai_prompts:

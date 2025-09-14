@@ -388,7 +388,7 @@ def generate_ai_analysis(comments, config, user_detail_config):
         analysis_prompt = analysis_prompt.replace("{name}", user_detail_config.get('display_name', user_detail_config['user_id']))
 
         # system promptも置換
-        system_prompt = "あなたは優秀な精神科医です。次の文章は{name}と言う人物のコメントです。この文章を要約し、感情分析と精神分析をしてください。特に攻撃性と現実逃避に焦点を当てて下さい。要約は箇条書きにし、人物名に注目してください。そして鋭く批判的に要約してください。行の最後は必ず「。」で終わる事。"
+        system_prompt = "あなたは優秀な精神科医です。次の文章は{name}と言う人物のコメントです。この文章を要約し、感情分析と精神分析をしてください。特に攻撃性と現実逃避に焦点を当てて下さい。要約は箇条書きにし、人物名に注目してください。そして鋭く批判的に要約してください。"
         system_prompt = system_prompt.replace("{name}", user_detail_config.get('display_name', user_detail_config['user_id']))
 
         user_data_text = "\n".join(comment_texts)
