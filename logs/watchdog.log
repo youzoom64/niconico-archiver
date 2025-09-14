@@ -600,3 +600,19 @@
 2025-09-15 06:42:26 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-15 06:42:26 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-15 06:42:26 - INFO - [123 (テストの人)] 自動監視開始
+2025-09-15 07:09:05 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:09:05 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:09:05 - INFO - [123 (テストの人)] 自動監視開始
+2025-09-15 07:09:17 - INFO - [123] 監視停止
+2025-09-15 07:11:56 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:11:56 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:11:56 - INFO - [123 (テストの人)] 自動監視開始
+2025-09-15 07:25:39 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:25:39 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:25:39 - INFO - [123 (テストの人)] 自動監視開始
+2025-09-15 07:29:38 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:29:38 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:29:38 - INFO - [123 (テストの人)] 自動監視開始
+2025-09-15 07:32:01 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:32:01 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-15 07:32:01 - INFO - [123 (テストの人)] 自動監視開始

@@ -194,6 +194,39 @@ class Mp4Monitor:
         except Exception as e:
             print(f"DEBUG: [{self.user_name}] パイプライン呼び出しエラー: {str(e)}")
     
+
+    def find_ncv_directory_for_account(ncv_base_directory, account_id, display_name=""):
+        """NCVディレクトリ内でアカウント専用ディレクトリを検索"""
+        try:
+            if not os.path.exists(ncv_base_directory):
+                return ncv_base_directory
+            
+            # 1. account_id + display_name のディレクトリを探す
+            if display_name:
+                target_dir = f"{account_id}_{display_name}"
+                target_path = os.path.join(ncv_base_directory, target_dir)
+                if os.path.exists(target_path):
+                    return target_path
+            
+            # 2. account_id で始まるディレクトリを探す
+            for dirname in os.listdir(ncv_base_directory):
+                if dirname.startswith(f"{account_id}_"):
+                    return os.path.join(ncv_base_directory, dirname)
+            
+            # 3. デフォルトディレクトリを作成
+            if display_name:
+                default_dir = os.path.join(ncv_base_directory, f"{account_id}_{display_name}")
+            else:
+                default_dir = os.path.join(ncv_base_directory, f"{account_id}_user")
+            
+            os.makedirs(default_dir, exist_ok=True)
+            return default_dir
+            
+        except Exception as e:
+            print(f"NCVディレクトリ検索エラー: {str(e)}")
+            return ncv_base_directory
+
+
     def watch_loop(self):
         print(f"DEBUG: [{self.user_name}] 監視ループ開始: {self.platform_directory}")
         print(f"DEBUG: [{self.user_name}] 無視ファイル数: {len(self.ignored_files)}")

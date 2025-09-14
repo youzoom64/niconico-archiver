@@ -2,11 +2,17 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import json
 import tkinter.simpledialog
+import os
+import threading
 
 class UserConfigWindow:
     def __init__(self, parent, config_manager, refresh_callback):
         self.config_manager = config_manager
         self.refresh_callback = refresh_callback
+        
+        # ニックネーム取得の重複実行を防ぐフラグを初期化
+        self.nickname_fetching = False
+        self.nickname_fetch_thread = None
         
         self.window = tk.Toplevel(parent)
         self.window.title("ユーザー設定管理")
@@ -16,6 +22,21 @@ class UserConfigWindow:
         self.current_config = None
         self.setup_ui()
         self.load_users()
+
+    def fetch_nickname(self):
+        """ニックネーム取得ボタンのコールバック"""
+        account_id = self.account_var.get().strip()
+        if not account_id:
+            messagebox.showwarning("警告", "アカウントIDを入力してください")
+            return
+        
+        if not account_id.isdigit():
+            messagebox.showwarning("警告", "正しいアカウントIDを入力してください")
+            return
+        
+        # 手動実行の場合は即座に実行
+        self.fetch_nickname_async(account_id, force=True)
+
 
     def sync_tree_to_memory(self):
         """TreeViewの内容をメモリ(_tree_user_data)に反映 - 既存データを保持"""
@@ -115,33 +136,45 @@ class UserConfigWindow:
         self.display_name_var = tk.StringVar()
         tk.Entry(name_frame, textvariable=self.display_name_var).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
         
-        # 基本設定
+        # 基本設定 - ここでbasic_frameを正しく定義
         basic_frame = tk.LabelFrame(scrollable_frame, text="基本設定")
         basic_frame.pack(fill=tk.X, pady=5)
         
+        # Account ID入力
         tk.Label(basic_frame, text="Account ID:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
         self.account_var = tk.StringVar()
-        tk.Entry(basic_frame, textvariable=self.account_var).grid(row=0, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
+        account_entry = tk.Entry(basic_frame, textvariable=self.account_var)
+        account_entry.grid(row=0, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
+        account_entry.bind('<FocusOut>', self.on_account_id_changed)
         
+        # ニックネーム取得ボタン
+        tk.Button(basic_frame, text="ニックネーム取得", 
+                command=self.fetch_nickname).grid(row=0, column=2, padx=5)
+        
+        # Platform設定
         tk.Label(basic_frame, text="Platform:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
         self.platform_var = tk.StringVar(value="niconico")
         platform_combo = ttk.Combobox(basic_frame, textvariable=self.platform_var, 
-                                     values=["niconico", "youtube", "twitch"])
+                                    values=["niconico", "youtube", "twitch"])
         platform_combo.grid(row=1, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
         
+        # 監視Dir設定
         tk.Label(basic_frame, text="監視Dir:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
         self.platform_dir_var = tk.StringVar(value="rec")
         tk.Entry(basic_frame, textvariable=self.platform_dir_var).grid(row=2, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
         
+        # NCVDir設定
         tk.Label(basic_frame, text="NCVDir:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
         self.ncv_dir_var = tk.StringVar(value="ncv")
         tk.Entry(basic_frame, textvariable=self.ncv_dir_var).grid(row=3, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
         
         basic_frame.columnconfigure(1, weight=1)
         
+        # 以下、残りの設定セクションは元のコードと同じ...
         # API設定
         api_frame = tk.LabelFrame(scrollable_frame, text="API設定")
         api_frame.pack(fill=tk.X, pady=5)
+
 
         # 要約AIモデル選択
         tk.Label(api_frame, text="要約AIモデル:").pack(anchor=tk.W)
@@ -431,6 +464,71 @@ class UserConfigWindow:
         tk.Button(button_frame, text="適用", command=self.apply_config).pack(side=tk.LEFT, padx=5)
         tk.Button(button_frame, text="キャンセル", command=self.window.destroy).pack(side=tk.RIGHT, padx=5)
         
+    def on_account_id_changed(self, event):
+        """アカウントIDが変更されたときの処理"""
+        account_id = self.account_var.get().strip()
+        if account_id and account_id.isdigit():
+            # 遅延実行で重複を防ぐ
+            if hasattr(self, 'nickname_timer'):
+                self.window.after_cancel(self.nickname_timer)
+            self.nickname_timer = self.window.after(1000, lambda: self.fetch_nickname_async(account_id, force=False))
+
+    def fetch_nickname_async(self, account_id, force=False):
+        """非同期でニックネームを取得"""
+        # 既に実行中かつ強制実行でない場合はスキップ
+        if hasattr(self, 'nickname_fetching') and self.nickname_fetching and not force:
+            print(f"ニックネーム取得スキップ (既に実行中): {account_id}")
+            return
+        
+        # 前回のスレッドが残っている場合は適切に処理
+        if hasattr(self, 'nickname_fetch_thread') and self.nickname_fetch_thread and self.nickname_fetch_thread.is_alive():
+            if not force:
+                print(f"ニックネーム取得スキップ (スレッド実行中): {account_id}")
+                return
+        
+        self.nickname_fetching = True
+        print(f"ニックネーム取得開始: {account_id} (force={force})")
+        
+        def fetch_thread():
+            try:
+                from utils import get_user_nickname_with_cache
+                nickname = get_user_nickname_with_cache(account_id)
+                
+                # UIスレッドで結果を反映
+                self.window.after(0, lambda: self.update_display_name_safe(nickname, account_id, force))
+                
+            except Exception as e:
+                print(f"ニックネーム取得エラー (ID: {account_id}): {e}")
+                # エラーメッセージは手動実行時のみ表示
+                if force:
+                    self.window.after(0, lambda: messagebox.showerror("エラー", f"ニックネーム取得に失敗しました: {e}"))
+            finally:
+                self.nickname_fetching = False
+                print(f"ニックネーム取得完了: {account_id}")
+        
+        # 新しいスレッドで実行
+        self.nickname_fetch_thread = threading.Thread(target=fetch_thread, daemon=True)
+        self.nickname_fetch_thread.start()
+
+    def update_display_name_safe(self, nickname, account_id, force=False):
+        """安全にニックネームで表示名を更新"""
+        # 現在のアカウントIDと一致するかチェック
+        current_account_id = self.account_var.get().strip()
+        if current_account_id != account_id:
+            print(f"アカウントID不一致のためスキップ: {current_account_id} != {account_id}")
+            return  # 別のアカウントIDに変更されている場合は無視
+        
+        if nickname:
+            current_display_name = self.display_name_var.get().strip()
+            if not current_display_name:  # 表示名が空の場合のみ自動設定
+                self.display_name_var.set(nickname)
+                if force:  # 手動実行時のみ成功メッセージ表示
+                    messagebox.showinfo("成功", f"ニックネーム「{nickname}」を取得しました")
+            elif force:  # 手動実行時のみ確認ダイアログ表示
+                if messagebox.askyesno("確認", f"取得したニックネーム「{nickname}」で表示名を更新しますか？\n現在の表示名: {current_display_name}"):
+                    self.display_name_var.set(nickname)
+        elif force:  # 手動実行時のみエラーメッセージ表示
+            messagebox.showwarning("警告", "ニックネームを取得できませんでした")
 
     def sync_special_users_to_tree(self):
         """テキストフィールドのユーザーIDをTreeViewに同期"""
@@ -1076,6 +1174,10 @@ class SpecialUserConfigDialog:
     def __init__(self, parent, existing_config, default_ai_model, default_prompt, default_template, default_enabled):
         self.result = None
         
+        # ニックネーム取得の重複実行を防ぐフラグを初期化
+        self.nickname_fetching = False
+        self.nickname_fetch_thread = None
+        
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("スペシャルユーザー設定")
         self.dialog.geometry("600x600")
@@ -1083,6 +1185,14 @@ class SpecialUserConfigDialog:
         self.dialog.transient(parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self.cancel_clicked)
         
+        # UI要素の作成
+        self.create_ui(existing_config, default_ai_model, default_prompt, default_template, default_enabled)
+        
+        # 最後にwait_windowを呼び出し
+        self.dialog.wait_window()
+    
+    def create_ui(self, existing_config, default_ai_model, default_prompt, default_template, default_enabled):
+        """UI要素を作成"""
         # 設定項目
         main_frame = tk.Frame(self.dialog)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -1090,7 +1200,13 @@ class SpecialUserConfigDialog:
         # ユーザーID
         tk.Label(main_frame, text="ユーザーID:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
         self.user_id_var = tk.StringVar(value=existing_config["user_id"] if existing_config else "")
-        tk.Entry(main_frame, textvariable=self.user_id_var, width=30).grid(row=0, column=1, sticky=tk.W+tk.E, padx=5, pady=5)
+        user_id_entry = tk.Entry(main_frame, textvariable=self.user_id_var, width=30)
+        user_id_entry.grid(row=0, column=1, sticky=tk.W+tk.E, padx=5, pady=5)
+        user_id_entry.bind('<FocusOut>', self.on_user_id_changed)
+        
+        # ニックネーム取得ボタン
+        tk.Button(main_frame, text="ニックネーム取得", 
+                 command=self.fetch_nickname).grid(row=0, column=2, padx=5)
         
         # 表示名
         tk.Label(main_frame, text="表示名:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
@@ -1140,10 +1256,74 @@ class SpecialUserConfigDialog:
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(4, weight=1)
         main_frame.rowconfigure(6, weight=1)
+
+    def on_user_id_changed(self, event):
+        """ユーザーIDが変更されたときの処理"""
+        user_id = self.user_id_var.get().strip()
+        if user_id and user_id.isdigit():
+            if hasattr(self, 'nickname_timer'):
+                self.dialog.after_cancel(self.nickname_timer)
+            self.nickname_timer = self.dialog.after(1000, lambda: self.fetch_nickname_async(user_id, force=False))
+
+    def fetch_nickname(self):
+        """ニックネーム取得ボタンのコールバック"""
+        user_id = self.user_id_var.get().strip()
+        if not user_id:
+            messagebox.showwarning("警告", "ユーザーIDを入力してください")
+            return
         
-        # ★ これが必要！ダイアログが閉じられるまで待機
-        self.dialog.wait_window()
-    
+        if not user_id.isdigit():
+            messagebox.showwarning("警告", "正しいユーザーIDを入力してください")
+            return
+        
+        self.fetch_nickname_async(user_id, force=True)
+
+    def fetch_nickname_async(self, user_id, force=False):
+        """非同期でニックネーム取得"""
+        if hasattr(self, 'nickname_fetching') and self.nickname_fetching and not force:
+            return
+        
+        if hasattr(self, 'nickname_fetch_thread') and self.nickname_fetch_thread and self.nickname_fetch_thread.is_alive():
+            if not force:
+                return
+        
+        self.nickname_fetching = True
+        
+        def fetch_thread():
+            try:
+                from utils import get_user_nickname_with_cache
+                nickname = get_user_nickname_with_cache(user_id)
+                
+                self.dialog.after(0, lambda: self.update_display_name_safe(nickname, user_id, force))
+                
+            except Exception as e:
+                print(f"ニックネーム取得エラー (ID: {user_id}): {e}")
+                if force:
+                    self.dialog.after(0, lambda: messagebox.showerror("エラー", f"ニックネーム取得に失敗しました: {e}"))
+            finally:
+                self.nickname_fetching = False
+        
+        self.nickname_fetch_thread = threading.Thread(target=fetch_thread, daemon=True)
+        self.nickname_fetch_thread.start()
+
+    def update_display_name_safe(self, nickname, user_id, force=False):
+        """安全に表示名を更新"""
+        current_user_id = self.user_id_var.get().strip()
+        if current_user_id != user_id:
+            return
+        
+        if nickname:
+            current_name = self.display_name_var.get().strip()
+            if not current_name:
+                self.display_name_var.set(nickname)
+                if force:
+                    messagebox.showinfo("成功", f"ニックネーム「{nickname}」を取得しました")
+            elif force:
+                if messagebox.askyesno("確認", f"表示名を「{nickname}」に更新しますか？\n現在: {current_name}"):
+                    self.display_name_var.set(nickname)
+        elif force:
+            messagebox.showwarning("警告", "ニックネームを取得できませんでした")
+
     def ok_clicked(self):
         user_id = self.user_id_var.get().strip()
         if not user_id:
@@ -1161,8 +1341,7 @@ class SpecialUserConfigDialog:
             "tags": []
         }
         self.dialog.destroy()
-    
+
     def cancel_clicked(self):
         self.result = None
         self.dialog.destroy()
-
