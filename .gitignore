@@ -90,3 +90,6 @@ secrets.txt
 
 # ffmpeg logs
 ffmpeg*.log
+__pycache__/
+*.pyc
+logs/*.log
