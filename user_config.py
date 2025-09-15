@@ -160,14 +160,20 @@ class UserConfigWindow:
         
         # 監視Dir設定
         tk.Label(basic_frame, text="監視Dir:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
+        dir_frame = tk.Frame(basic_frame)
+        dir_frame.grid(row=2, column=1, columnspan=2, sticky=tk.W+tk.E, padx=5, pady=2)
         self.platform_dir_var = tk.StringVar(value="rec")
-        tk.Entry(basic_frame, textvariable=self.platform_dir_var).grid(row=2, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
-        
+        tk.Entry(dir_frame, textvariable=self.platform_dir_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(dir_frame, text="参照", command=lambda: self.browse_directory(self.platform_dir_var)).pack(side=tk.RIGHT, padx=(5,0))
+
         # NCVDir設定
         tk.Label(basic_frame, text="NCVDir:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
+        ncv_frame = tk.Frame(basic_frame)
+        ncv_frame.grid(row=3, column=1, columnspan=2, sticky=tk.W+tk.E, padx=5, pady=2)
         self.ncv_dir_var = tk.StringVar(value="ncv")
-        tk.Entry(basic_frame, textvariable=self.ncv_dir_var).grid(row=3, column=1, sticky=tk.W+tk.E, padx=5, pady=2)
-        
+        tk.Entry(ncv_frame, textvariable=self.ncv_dir_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(ncv_frame, text="参照", command=lambda: self.browse_directory(self.ncv_dir_var)).pack(side=tk.RIGHT, padx=(5,0))
+                
         basic_frame.columnconfigure(1, weight=1)
         
         # 以下、残りの設定セクションは元のコードと同じ...
@@ -464,6 +470,45 @@ class UserConfigWindow:
         tk.Button(button_frame, text="適用", command=self.apply_config).pack(side=tk.LEFT, padx=5)
         tk.Button(button_frame, text="キャンセル", command=self.window.destroy).pack(side=tk.RIGHT, padx=5)
         
+    def browse_directory(self, target_var):
+        """フォルダ選択ダイアログを表示"""
+        from tkinter import filedialog
+        
+        # 現在の値を初期ディレクトリとして使用
+        current_path = target_var.get()
+        if current_path and os.path.exists(current_path):
+            initial_dir = current_path
+        else:
+            initial_dir = os.getcwd()
+        
+        # フォルダ選択ダイアログを表示
+        selected_dir = filedialog.askdirectory(
+            title="フォルダを選択してください",
+            initialdir=initial_dir
+        )
+        
+        if selected_dir:
+            # 相対パスに変換するかユーザーに確認
+            current_dir = os.getcwd()
+            try:
+                # 現在のディレクトリからの相対パスを計算
+                rel_path = os.path.relpath(selected_dir, current_dir)
+                
+                # 相対パスが短い場合は相対パス、そうでなければ絶対パスを使用
+                if len(rel_path) < len(selected_dir) and not rel_path.startswith('..'):
+                    if messagebox.askyesno("パス形式選択", 
+                        f"相対パス '{rel_path}' を使用しますか？\n\n"
+                        f"「はい」: {rel_path}\n"
+                        f"「いいえ」: {selected_dir}"):
+                        target_var.set(rel_path)
+                    else:
+                        target_var.set(selected_dir)
+                else:
+                    target_var.set(selected_dir)
+            except ValueError:
+                # 相対パス計算に失敗した場合は絶対パスを使用
+                target_var.set(selected_dir)
+
     def on_account_id_changed(self, event):
         """アカウントIDが変更されたときの処理"""
         account_id = self.account_var.get().strip()

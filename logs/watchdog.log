@@ -620,3 +620,22 @@
 2025-09-15 08:42:27 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
 2025-09-15 08:42:27 - INFO - [123 (テストの人)] 自動監視開始
 2025-09-15 08:42:29 - INFO - [123] 監視停止
+2025-09-15 08:43:48 - INFO - [117396334] 監視ディレクトリが存在しません: F:\project_root\app_workspaces\niconico-archiver\rec
+2025-09-15 08:46:15 - INFO - [117396334] 監視ディレクトリが存在しません: F:\project_root\app_workspaces\niconico-archiver\rec
+2025-09-15 08:46:15 - INFO - [117396334] 監視開始: F:\project_root\app_workspaces\niconico-archiver\rec
+2025-09-15 08:46:15 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
+2025-09-15 08:47:42 - INFO - [117396334] 監視ディレクトリが存在しません: F:\project_root\app_workspaces\niconico-archiver\rec
+2025-09-15 08:47:42 - INFO - [117396334] 監視開始: F:\project_root\app_workspaces\niconico-archiver\rec
+2025-09-15 08:47:42 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
+2025-09-15 08:55:14 - INFO - [117396334] アカウントディレクトリ作成: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_user
+2025-09-15 08:55:14 - INFO - [117396334] 監視開始: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_user
+2025-09-15 08:55:14 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
+2025-09-15 08:59:30 - INFO - [117396334] アカウントディレクトリ発見: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_user
+2025-09-15 09:00:20 - INFO - [117396334] アカウントディレクトリ発見: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_user
+2025-09-15 09:00:20 - INFO - [117396334] 監視開始: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_user
+2025-09-15 09:00:20 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
+2025-09-15 09:00:40 - INFO - [117396334] 監視停止
+2025-09-15 09:00:45 - INFO - [117396334] アカウントディレクトリ作成: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_☆キチ害メンヘラGOD☆
+2025-09-15 09:00:45 - INFO - [117396334] 監視開始: F:\project_root\app_workspaces\niconico-archiver\rec\117396334_☆キチ害メンヘラGOD☆
+2025-09-15 09:00:45 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
+2025-09-15 09:04:06 - INFO - [117396334] 監視停止
