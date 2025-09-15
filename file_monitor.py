@@ -29,6 +29,9 @@ class Mp4Monitor:
         self.logger = logger
         self.error_callback = error_callback
         
+        # display_nameを取得
+        self.display_name = config.get("display_name", "")
+        
         # パスを絶対パスに変換
         platform_dir = config["basic_settings"]["platform_directory"]
         if os.path.isabs(platform_dir):
@@ -39,6 +42,7 @@ class Mp4Monitor:
         # アカウントIDからディレクトリを特定
         self.platform_directory = self.find_account_directory()
         
+        # ★ 追加が必要な属性 ★
         self.running = False
         self.observer = None
         self.file_sizes = {}  # ファイルサイズ記録用
@@ -139,15 +143,17 @@ class Mp4Monitor:
                     if id_part == account_id:
                         self.logger.log(f"[{self.user_name}] アカウントディレクトリ発見: {dir_path}")
                         return dir_path
+            # 見つからなかった場合は新規作成
+            if self.display_name:
+                account_dir = os.path.join(self.base_platform_directory, f"{account_id}_{self.display_name}")
+            else:
+                account_dir = os.path.join(self.base_platform_directory, f"{account_id}_user")
             
-            # 見つからない場合は作成
-            account_dir = os.path.join(self.base_platform_directory, f"{account_id}_user")
             os.makedirs(account_dir, exist_ok=True)
             self.logger.log(f"[{self.user_name}] アカウントディレクトリ作成: {account_dir}")
             return account_dir
-            
         except Exception as e:
-            self.logger.log(f"[{self.user_name}] ディレクトリ検索エラー: {str(e)}")
+            self.error_callback(self.user_name, f"アカウントディレクトリ検索エラー: {str(e)}")
             return self.base_platform_directory
 
     def get_mp4_files_with_size(self):
