@@ -84,3 +84,27 @@ def get_user_nickname_with_cache(user_id: str, cache_days=7):
             print(f"キャッシュ保存エラー: {e}")
     
     return nickname
+
+def find_account_directory(base_dir: str, account_id: str) -> str | None:
+    """
+    base_dir 以下から、指定アカウントIDで始まるディレクトリを探す。
+    ニックネーム部分は無視し、IDだけで判定する。
+    """
+    account_id = str(account_id)
+
+    if not os.path.exists(base_dir):
+        return None
+
+    for entry in os.listdir(base_dir):
+        full_path = os.path.join(base_dir, entry)
+        if os.path.isdir(full_path) and entry.startswith(account_id):
+            return full_path
+
+    return None
+
+
+def find_ncv_directory(config: dict) -> str:
+    """
+    config.json の basic_settings.ncv_directory を返すだけ
+    """
+    return config.get("basic_settings", {}).get("ncv_directory", "")

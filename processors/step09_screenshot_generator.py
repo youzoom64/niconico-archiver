@@ -1,121 +1,201 @@
+# processors/step09_screenshot_generator.py
 import os
 import json
-from datetime import datetime
+import math
 import subprocess
+from datetime import datetime
 import sys
+
+# utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import find_account_directory
-import math
+
+# プロジェクトルート（このファイルの親の親をルートとする想定）
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+FFMPEG_PATH = os.path.join(PROJECT_ROOT, "ffmpeg", "bin", "ffmpeg.exe") if os.name == "nt" else "ffmpeg"
+
+STEP_DEFAULT = 10  # 10秒刻み
 
 def process(pipeline_data):
     """Step09: スクリーンショット生成"""
     try:
         lv_value = pipeline_data['lv_value']
-        config = pipeline_data['config']
-        
+        account_id = pipeline_data['account_id']
+        platform_directory = pipeline_data['platform_directory']
+        config = pipeline_data.get('config', {})
+
         print(f"Step09 開始: {lv_value}")
-        
-        # 1. サムネイル生成機能が有効か確認
-        if not config["display_features"].get("enable_thumbnails", True):
+
+        # 機能ON/OFF
+        if not config.get("display_features", {}).get("enable_thumbnails", True):
             print("サムネイル生成機能が無効です。処理をスキップします。")
             return {"screenshot_generated": False, "reason": "feature_disabled"}
-        
-        # 2. アカウントディレクトリ検索
-        account_dir = find_account_directory(pipeline_data['platform_directory'], pipeline_data['account_id'])
+
+        # 間隔（秒）
+        step_seconds = int(config.get("display_features", {}).get("thumbnail_interval_seconds", STEP_DEFAULT))
+
+        # ディレクトリ系
+        account_dir = find_account_directory(platform_directory, account_id)
         broadcast_dir = os.path.join(account_dir, lv_value)
-        
-        # 3. MP4ファイル検索
+        os.makedirs(broadcast_dir, exist_ok=True)
+
+        # MP4 検索
         mp4_path = find_mp4_file(account_dir, lv_value)
         if not mp4_path:
             raise Exception(f"MP4ファイルが見つかりません: {lv_value}")
-        
-        # 4. 統合JSONから動画時間とtime_diff_seconds取得
-        broadcast_data = load_broadcast_data(broadcast_dir, lv_value)
-        video_duration = broadcast_data.get('video_duration', 0.0)
-        time_diff_seconds = broadcast_data.get('time_diff_seconds', 0)
-        
-        # 5. スクリーンショットディレクトリ作成
+        print(f"MP4ファイル発見: {mp4_path}")
+
+        # 統合JSON
+        data = load_broadcast_data(broadcast_dir, lv_value)
+        video_duration = float(data.get("video_duration", 0.0))  # 録画の長さ（秒）
+        time_diff_seconds = int(data.get("time_diff_seconds", 0))  # 録画→配信のオフセット
+
+        # スクショ保存先
         screenshot_dir = os.path.join(broadcast_dir, "screenshot", lv_value)
         os.makedirs(screenshot_dir, exist_ok=True)
-        
-        # 6. スクリーンショット生成
-        screenshot_count = generate_screenshots(mp4_path, screenshot_dir, video_duration, time_diff_seconds)
-        
-        print(f"Step09 完了: {lv_value} - スクリーンショット生成数: {screenshot_count}")
+
+        # 最初の発話(配信基準) → 録画基準に変換して開始点を決める
+        earliest_speech_ts_broadcast = load_earliest_transcript_ts(broadcast_dir, lv_value)
+        # 録画基準秒に戻す（負にはしない）
+        start_recording_seconds = max(0, earliest_speech_ts_broadcast - time_diff_seconds)
+        # 10秒グリッドに揃える（floor）
+        start_recording_seconds = (start_recording_seconds // step_seconds) * step_seconds
+
+        # 上限（録画の最終秒・floor）
+        end_recording_seconds = int(math.floor(video_duration))
+
+        # 生成
+        count = generate_screenshots(
+            mp4_path=mp4_path,
+            screenshot_dir=screenshot_dir,
+            start_recording_seconds=start_recording_seconds,
+            end_recording_seconds=end_recording_seconds,
+            step_seconds=step_seconds,
+            time_diff_seconds=time_diff_seconds
+        )
+
+        print(f"Step09 完了: {lv_value} - スクリーンショット生成数: {count}")
         return {
-            "screenshot_generated": True, 
-            "screenshot_count": screenshot_count, 
+            "screenshot_generated": True,
+            "screenshot_count": count,
             "screenshot_dir": screenshot_dir
         }
-        
+
     except Exception as e:
         print(f"Step09 エラー: {str(e)}")
         raise
 
+
+# ---------------------- helpers ----------------------
+
 def find_mp4_file(account_dir, lv_value):
-    """MP4ファイルを検索"""
+    """アカウント配下で lv を含む MP4 を1つ返す（最初に見つかったもの）"""
     if not os.path.exists(account_dir):
         return None
-    
     for filename in os.listdir(account_dir):
-        if filename.endswith('.mp4') and lv_value in filename:
-            mp4_path = os.path.join(account_dir, filename)
-            print(f"MP4ファイル発見: {mp4_path}")
-            return mp4_path
-    
+        if filename.endswith(".mp4") and lv_value in filename:
+            return os.path.join(account_dir, filename)
     return None
 
-def load_broadcast_data(broadcast_dir, lv_value):
-    """統合JSONファイルを読み込み"""
-    json_path = os.path.join(broadcast_dir, f"{lv_value}_data.json")
-    if os.path.exists(json_path):
-        with open(json_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    raise Exception(f"統合JSONファイルが見つかりません: {json_path}")
 
-def generate_screenshots(mp4_path, screenshot_dir, video_duration, time_diff_seconds):
-    """録画ファイルから10秒刻みでスクリーンショット生成"""
+def load_broadcast_data(broadcast_dir, lv_value):
+    """統合JSON"""
+    path = os.path.join(broadcast_dir, f"{lv_value}_data.json")
+    if not os.path.exists(path):
+        raise Exception(f"統合JSONファイルが見つかりません: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_earliest_transcript_ts(broadcast_dir, lv_value):
+    """
+    文字起こしJSONから最初(最小)のtimestamp（配信基準秒）を返す。無ければ0。
+    """
+    path = os.path.join(broadcast_dir, f"{lv_value}_transcript.json")
     try:
-        screenshot_count = 0
-        
-        for recording_seconds in range(0, int(video_duration) + 1, 10):
-            if recording_seconds > video_duration:
-                break
-                
-            # 配信時間を計算
-            broadcast_seconds = recording_seconds + time_diff_seconds
-            
-            # タイムブロック位置を計算（10の倍数に切り上げ）
-            timeline_position = math.ceil(broadcast_seconds / 10.0) * 10
-            
-            output_path = os.path.join(screenshot_dir, f"{recording_seconds}.png")
-            
-            # ffmpegでスクリーンショット生成
-            cmd = [
-                'ffmpeg', '-y',
-                '-ss', str(recording_seconds),
-                '-i', mp4_path,
-                '-vframes', '1',
-                '-q:v', '2',
-                '-f', 'image2',
-                output_path
-            ]
-            
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            ts_list = []
+            for t in data.get("transcripts", []):
+                ts = t.get("timestamp")
+                if isinstance(ts, (int, float)):
+                    ts_list.append(int(ts))
+            if ts_list:
+                ts_min = max(0, min(ts_list))
+                return ts_min
+    except Exception:
+        pass
+    return 0
+
+
+def generate_screenshots(
+    mp4_path,
+    screenshot_dir,
+    start_recording_seconds,
+    end_recording_seconds,
+    step_seconds,
+    time_diff_seconds
+):
+    """
+    ffmpegでサムネイル生成。
+    - 既存PNGがあればスキップ（上書きしない）
+    - ffmpeg出力は text=False（バイナリ） & -loglevel error で CP932 デコード事故回避
+    - ログは「録画秒 → 配信秒 → タイムブロック秒 → パス」
+    """
+    saved_count = 0
+
+    for recording_seconds in range(start_recording_seconds, end_recording_seconds + 1, step_seconds):
+        # 配信基準秒へ
+        broadcast_seconds = recording_seconds + time_diff_seconds
+        # 10秒ブロックへ ceil
+        timeline_block = int(math.ceil(broadcast_seconds / step_seconds) * step_seconds)
+
+        out_file = os.path.join(screenshot_dir, f"{recording_seconds}.png")
+
+        # 既存ならスキップ
+        if os.path.exists(out_file) and os.path.getsize(out_file) > 0:
+            print(f"録画{recording_seconds}秒 → 配信{broadcast_seconds}秒 → タイムブロック{timeline_block}秒 → 既存のためスキップ")
+            continue
+
+        # ffmpeg 実行（-ss を -i の前に置いて高速シーク）
+        cmd = [
+            FFMPEG_PATH,
+            "-loglevel", "error",
+            "-ss", str(recording_seconds),
+            "-i", mp4_path,
+            "-frames:v", "1",
+            "-y",  # 出力が壊れている/0byteの時だけ上書きさせたいので -y 付ける。正常ファイルは上の存在チェックでスキップ済み
+            out_file,
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False,  # ← バイナリで読む（CP932事故回避）
+                creationflags=(0x08000000 if os.name == "nt" else 0)
+            )
+            if result.returncode == 0 and os.path.exists(out_file) and os.path.getsize(out_file) > 0:
+                print(f"録画{recording_seconds}秒 → 配信{broadcast_seconds}秒 → タイムブロック{timeline_block}秒 → {out_file}")
+                saved_count += 1
+            else:
+                err = (result.stderr or b"")[:200].decode("utf-8", errors="ignore")
+                print(f"FFmpeg失敗@{recording_seconds}s: {err}")
+                # 失敗時は壊れた出力を消す
+                try:
+                    if os.path.exists(out_file) and os.path.getsize(out_file) == 0:
+                        os.remove(out_file)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            print(f"スクリーンショット生成エラー (録画{recording_seconds}秒): {str(e)}")
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                if result.returncode == 0:
-                    screenshot_count += 1
-                    print(f"録画{recording_seconds}秒 → 配信{broadcast_seconds}秒 → タイムブロック{timeline_position}秒 → {output_path}")
-                else:
-                    print(f"スクリーンショット生成失敗 (録画{recording_seconds}秒): {result.stderr}")
-                    
-            except subprocess.TimeoutExpired:
-                print(f"スクリーンショット生成タイムアウト: 録画{recording_seconds}秒")
-            except Exception as e:
-                print(f"スクリーンショット生成エラー (録画{recording_seconds}秒): {str(e)}")
-        
-        return screenshot_count
-        
-    except Exception as e:
-        print(f"スクリーンショット生成処理エラー: {str(e)}")
-        return 0
+                if os.path.exists(out_file) and os.path.getsize(out_file) == 0:
+                    os.remove(out_file)
+            except Exception:
+                pass
+
+    return saved_count

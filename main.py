@@ -24,8 +24,11 @@ class MainWindow:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("ニコ生アーカイブ監視システム")
-        self.root.geometry("800x600")
-        
+        self.root.geometry("800x1000")
+            # リサイズ可能に設定
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
+
         self.config_manager = ConfigManager()
         self.logger = Logger()
         
@@ -66,7 +69,8 @@ class MainWindow:
         user_frame = tk.LabelFrame(self.root, text="監視中アカウント")
         user_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        self.user_tree = ttk.Treeview(user_frame, columns=("display_name", "platform", "status"), height=6)
+        # ユーザー一覧の高さを増加
+        self.user_tree = ttk.Treeview(user_frame, columns=("display_name", "platform", "status"), height=10)  # 6→10に
         self.user_tree.heading("#0", text="アカウントID")
         self.user_tree.heading("display_name", text="表示名")
         self.user_tree.heading("platform", text="Platform")
@@ -88,18 +92,19 @@ class MainWindow:
         tk.Button(control_frame, text="停止", command=self.stop_watch).pack(side=tk.LEFT, padx=5)
         tk.Button(control_frame, text="全停止", command=self.stop_all_watch).pack(side=tk.LEFT, padx=5)
         
-        # 選択中ユーザー詳細
+        # 選択中ユーザー詳細の高さを調整
         detail_frame = tk.LabelFrame(self.root, text="選択中アカウント詳細")
         detail_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.detail_text = tk.Text(detail_frame, height=8, state=tk.DISABLED)
-        self.detail_text.pack(fill=tk.X, padx=5, pady=5)
-        
-        # ログ
+
+        self.detail_text = tk.Text(detail_frame, height=12, state=tk.DISABLED)  # 高さを8→12に増加
+        self.detail_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)  # expand=Trueを追加
+                
+        # ログエリアにより多くのスペースを割り当て
         log_frame = tk.LabelFrame(self.root, text="ログ")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=10)
+
+        # scrolledtextの初期高さを増加
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, wrap=tk.WORD)  # 高さを10→15に
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # イベントバインド

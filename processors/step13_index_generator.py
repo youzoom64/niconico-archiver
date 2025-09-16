@@ -74,10 +74,10 @@ def collect_broadcast_data(account_dir):
                             'image_url': data.get('image_generation', {}).get('imgur_url', ''),
                             'music_urls': get_music_urls_multiple(data),
                             'transcript_segments': get_transcript_segments(item_path, lv_value),
+                            'transcript_text': get_transcript_text(item_path, lv_value),  # ← これを追加
                             'tags': []
                         }
-                        broadcast_list.append(broadcast_info)
-        
+                                
         # 開始時間順でソート（新しい順）
         broadcast_list.sort(key=lambda x: x['start_time'], reverse=True)
         print(f"配信データ収集完了: {len(broadcast_list)}件")
@@ -125,18 +125,31 @@ def get_transcript_text(broadcast_dir, lv_value):
     return ''
 
 def process_tags(broadcast_list, tags_config):
-    """タグマッチング処理"""
+    """タグマッチング処理（安全版）"""
+    # 空や非文字列を除外して、小文字化の比較用を用意
+    norm_tags = [t.strip() for t in tags_config if isinstance(t, str) and t.strip()]
+    norm_tags_lower = [t.lower() for t in norm_tags]
+
     for broadcast in broadcast_list:
-        # 検索対象テキスト
-        search_text = f"{broadcast['title']} {broadcast['summary_text']} {broadcast['transcript_text']}"
-        search_text = search_text.lower()
-        
-        # 各タグをチェック
-        for tag in tags_config:
-            if tag.lower() in search_text:
+        # タグ配列の存在保証
+        if not isinstance(broadcast.get('tags'), list):
+            broadcast['tags'] = []
+
+        # 検索対象テキスト（存在しないキーは空文字に）
+        title = broadcast.get('title') or broadcast.get('live_title') or broadcast.get('lv_value', '')
+        summary = broadcast.get('summary_text', '')
+        transcript_text = broadcast.get('transcript_text', '')
+        search_text = f"{title} {summary} {transcript_text}".lower()
+
+        # マッチしたタグを一括抽出し、重複なく追加
+        matched = {norm_tags[i] for i, t in enumerate(norm_tags_lower) if t in search_text}
+        for tag in matched:
+            if tag not in broadcast['tags']:
                 broadcast['tags'].append(tag)
-    
+
     return broadcast_list
+
+
 
 def generate_index_page(account_dir, broadcast_list, config):
     """メイン一覧ページ生成"""
@@ -606,19 +619,6 @@ def generate_broadcast_items(broadcast_list):
         items.append(item_html)
     
     return '\n        '.join(items)
-
-def process_tags(broadcast_list, tags_config):
-    """タグマッチング処理"""
-    for broadcast in broadcast_list:
-        search_text = f"{broadcast['title']} {broadcast['summary_text']} {broadcast['transcript_text']}"
-        search_text = search_text.lower()
-        
-        for tag in tags_config:
-            if tag.lower() in search_text:
-                broadcast['tags'].append(tag)
-    
-    return broadcast_list
-
 
 def create_tag_html(filtered_broadcasts, tag, all_tags):
     """タグページHTML生成"""
