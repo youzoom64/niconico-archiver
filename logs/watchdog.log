@@ -689,3 +689,9 @@
 2025-09-18 17:33:43 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
 2025-09-18 17:34:50 - INFO - [123] 監視停止
 2025-09-18 17:34:50 - INFO - [117396334] 監視停止
+2025-09-21 02:31:09 - INFO - [123] アカウントディレクトリ発見: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-21 02:31:09 - INFO - [123] 監視開始: C:\project_root\app_workspaces\niconico-archiver\test_rec\123_user
+2025-09-21 02:31:09 - INFO - [123 (テストの人)] 自動監視開始
+2025-09-21 02:31:09 - INFO - [117396334] アカウントディレクトリ作成: C:\project_root\app_workspaces\niconico-archiver\rec\117396334_☆キチ害メンヘラGOD☆
+2025-09-21 02:31:09 - INFO - [117396334] 監視開始: C:\project_root\app_workspaces\niconico-archiver\rec\117396334_☆キチ害メンヘラGOD☆
+2025-09-21 02:31:09 - INFO - [117396334 (☆キチ害メンヘラGOD☆)] 自動監視開始
