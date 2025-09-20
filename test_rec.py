@@ -28,9 +28,9 @@ DEBUGLOG = logging.getLogger(__name__)
 
 # 座標設定
 EXTENSION_COORDINATES = {
-    'extension_icon': (360, 65),
-    'start_button': (325, 126),
-    'stop_button': (325, 165),
+    'extension_icon': (401, 61),
+    'start_button': (335, 126),
+    'stop_button': (339, 165),
 }
 
 # Chrome設定
@@ -193,7 +193,7 @@ def connect_selenium():
         return None
 
 def setup_window_and_activate(driver):
-    """ウィンドウをモニター2の(0,0)、300x400に設定してアクティブ化"""
+    """ウィンドウをモニター2の(0,0)、800x1200に設定してアクティブ化"""
     DEBUGLOG.debug("ウィンドウ設定・アクティブ化開始")
     
     monitors = get_monitors()
@@ -205,10 +205,10 @@ def setup_window_and_activate(driver):
     target_x = monitor2.x
     target_y = monitor2.y
     
-    DEBUGLOG.info(f"ウィンドウ設定: 位置({target_x}, {target_y}), サイズ(300x400)")
+    DEBUGLOG.info(f"ウィンドウ設定: 位置({target_x}, {target_y}), サイズ(800x1200)")
     
     driver.set_window_position(target_x, target_y)
-    driver.set_window_size(550, 500)
+    driver.set_window_size(800, 1200)
     
     time.sleep(1)
     
@@ -362,7 +362,7 @@ def main():
         time.sleep(3)
         
         # 8. 必要に応じて再生促進クリック
-        # trigger_playback_if_needed()
+        trigger_playback_if_needed()
         
         print("録画が開始されました")
         print("手動で終了するか、別途停止スクリプトを実行してください")
