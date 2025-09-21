@@ -88,16 +88,17 @@ def generate_screenshots(mp4_path, screenshot_dir, video_duration, time_diff_sec
             # タイムブロック位置を計算（10の倍数に切り上げ）
             timeline_position = math.ceil(broadcast_seconds / 10.0) * 10
             
-            output_path = os.path.join(screenshot_dir, f"{recording_seconds}.png")
+            output_path = os.path.join(screenshot_dir, f"{recording_seconds}.jpg")
             
-            # ffmpegでスクリーンショット生成
+            # ffmpegでスクリーンショット生成（80x60にリサイズ）
             cmd = [
                 'ffmpeg', '-y',
                 '-ss', str(recording_seconds),
                 '-i', mp4_path,
                 '-vframes', '1',
-                '-q:v', '2',
-                '-f', 'image2',
+                '-vf', 'scale=80:60',
+                '-q:v', '5',        # JPEG品質（1-31、低い数字=高品質）
+                '-f', 'image2',     # または '-f', 'mjpeg'
                 output_path
             ]
             

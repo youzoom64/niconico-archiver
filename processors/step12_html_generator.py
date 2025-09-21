@@ -28,7 +28,7 @@ def process(pipeline_data):
         ranking_data = load_json_file(broadcast_dir, f"{lv_value}_comment_ranking.json")
         
         # 3. 各種データ準備
-        timeline_data = create_timeline_blocks(transcript_data, comments_data, lv_value)
+        timeline_data = create_timeline_blocks(transcript_data, comments_data, lv_value, broadcast_data)
         transcript_blocks = timeline_data['transcript_blocks']
         comment_blocks = timeline_data['comment_blocks']
         word_ranking = prepare_word_ranking(broadcast_data)
@@ -69,9 +69,18 @@ def load_json_file(directory, filename):
             return json.load(f)
     return {}
 
-def create_timeline_blocks(transcript_data, comments_data, lv_value):
+def create_timeline_blocks(transcript_data, comments_data, lv_value, broadcast_data):
     """タイムラインブロックを文字起こしとコメントで分離して作成"""
     try:
+        # elapsed_timeから最大時間を計算
+        elapsed_time = broadcast_data.get('elapsed_time', '')
+        max_seconds = parse_elapsed_time_to_seconds(elapsed_time)
+        
+        print(f"elapsed_time: {elapsed_time}, 最大秒数: {max_seconds}")
+        
+        # 0秒からelapsed_time分まで全タイムブロックを生成
+        all_time_blocks = set(range(0, max_seconds + 1, 10))
+        
         # 文字起こし用ブロック辞書
         transcript_blocks = {}
         # コメント用ブロック辞書  
@@ -79,60 +88,72 @@ def create_timeline_blocks(transcript_data, comments_data, lv_value):
         
         print(f"文字起こしデータ: {len(transcript_data.get('transcripts', []))}件")
         print(f"コメントデータ: {len(comments_data.get('comments', []))}件")
+        print(f"生成する全タイムブロック数: {len(all_time_blocks)}")
         
-        # 文字起こしデータから時間ブロック作成
+        # まず全タイムブロックを空で初期化
+        for block_time in all_time_blocks:
+            transcript_blocks[block_time] = {
+                'start_seconds': block_time,
+                'end_seconds': block_time + 10,
+                'time_range': format_time_range(block_time, block_time + 10),
+                'transcript': '',  # 空で初期化
+                'center_score': 0.0,
+                'positive_score': 0.0,
+                'negative_score': 0.0,
+                'screenshot_path': f"./screenshot/{lv_value}/{timeline_block}.jpg"  # .png → .jpg
+            }
+            
+            comment_blocks[block_time] = {
+                'start_seconds': block_time,
+                'end_seconds': block_time + 10,
+                'time_range': format_time_range(block_time, block_time + 10),
+                'comments': []  # 空で初期化
+            }
+        
+        # 文字起こしデータを適切なブロックに配置
         transcripts = transcript_data.get('transcripts', [])
         for segment in transcripts:
             timestamp = segment.get('timestamp', 0)
             timeline_block = (timestamp // 10) * 10
             
-            transcript_blocks[timeline_block] = {
-                'start_seconds': timeline_block,
-                'end_seconds': timeline_block + 10,
-                'time_range': format_time_range(timeline_block, timeline_block + 10),
-                'transcript': html.escape(segment.get('text', '')),
-                'center_score': round(segment.get('center_score', 0), 3),
-                'positive_score': round(segment.get('positive_score', 0), 3),
-                'negative_score': round(segment.get('negative_score', 0), 3),
-                'screenshot_path': f"./screenshot/{lv_value}/{timeline_block}.png"
-            }
+            # elapsed_time範囲内のデータのみ処理
+            if timeline_block in transcript_blocks:
+                transcript_blocks[timeline_block].update({
+                    'transcript': html.escape(segment.get('text', '')),
+                    'center_score': round(segment.get('center_score', 0), 3),
+                    'positive_score': round(segment.get('positive_score', 0), 3),
+                    'negative_score': round(segment.get('negative_score', 0), 3),
+                })
         
-        # コメントデータから時間ブロック作成
+        # コメントデータを適切なブロックに配置
         comments = comments_data.get('comments', [])
         for comment in comments:
             timeline_block = comment.get('timeline_block', 0)
             
-            if timeline_block not in comment_blocks:
-                comment_blocks[timeline_block] = {
-                    'start_seconds': timeline_block,
-                    'end_seconds': timeline_block + 10,
-                    'time_range': format_time_range(timeline_block, timeline_block + 10),
-                    'comments': []
+            # elapsed_time範囲内のデータのみ処理
+            if timeline_block in comment_blocks:
+                user_url = ""
+                if not comment.get('anonymity', False) and comment.get('user_id', ''):
+                    user_url = f"https://www.nicovideo.jp/user/{comment.get('user_id', '')}"
+                
+                comment_data = {
+                    'index': comment.get('no', 0),
+                    'time': format_seconds_to_time(comment.get('broadcast_seconds', 0)),
+                    'user_name': html.escape(comment.get('user_name', '')),
+                    'user_url': user_url,
+                    'text': html.escape(comment.get('text', '')),
+                    'icon_url': f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{comment.get('user_id', '')[:4]}/{comment.get('user_id', '')}.jpg"
                 }
-            
-            user_url = ""
-            if not comment.get('anonymity', False) and comment.get('user_id', ''):
-                user_url = f"https://www.nicovideo.jp/user/{comment.get('user_id', '')}"
-            
-            comment_data = {
-                'index': comment.get('no', 0),
-                'time': format_seconds_to_time(comment.get('broadcast_seconds', 0)),
-                'user_name': html.escape(comment.get('user_name', '')),
-                'user_url': user_url,
-                'text': html.escape(comment.get('text', '')),
-                'icon_url': f"https://secure-dcdn.cdn.nimg.jp/nicoaccount/usericon/{comment.get('user_id', '')[:4]}/{comment.get('user_id', '')}.jpg"
-            }
-            
-            comment_blocks[timeline_block]['comments'].append(comment_data)
+                
+                comment_blocks[timeline_block]['comments'].append(comment_data)
         
-        # 文字起こしブロックをソートして配列に変換
+        # ソートして配列に変換
         transcript_timeline = []
-        for block_time in sorted(transcript_blocks.keys()):
-            transcript_timeline.append(transcript_blocks[block_time])
-        
-        # コメントブロックをソートして配列に変換
         comment_timeline = []
-        for block_time in sorted(comment_blocks.keys()):
+        
+        for block_time in sorted(all_time_blocks):
+            transcript_timeline.append(transcript_blocks[block_time])
+            
             block = comment_blocks[block_time]
             block['comments'].sort(key=lambda x: x.get('time', ''))
             comment_timeline.append(block)
@@ -151,6 +172,29 @@ def create_timeline_blocks(transcript_data, comments_data, lv_value):
             'transcript_blocks': [],
             'comment_blocks': []
         }
+
+def parse_elapsed_time_to_seconds(elapsed_time_str):
+    """elapsed_time文字列を秒数に変換"""
+    try:
+        # "01:32:11.6330331" -> 秒数に変換
+        if not elapsed_time_str:
+            return 0
+            
+        time_parts = elapsed_time_str.split(':')
+        if len(time_parts) != 3:
+            return 0
+            
+        hours = int(time_parts[0])
+        minutes = int(time_parts[1])
+        seconds = float(time_parts[2])
+        
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        return int(total_seconds)
+        
+    except (ValueError, IndexError, AttributeError) as e:
+        print(f"elapsed_time解析エラー: {elapsed_time_str} - {str(e)}")
+        return 0
+
 
 def prepare_word_ranking(broadcast_data):
     """単語ランキングデータを準備"""
@@ -873,7 +917,7 @@ def generate_complete_html(timeline_data, broadcast_data, word_ranking, comment_
         <label for="autoJumpToggle">Auto-Jump:</label>
         <input checked id="autoJumpToggle" name="autoJumpToggle" type="checkbox" />
         <audio controls id="audioPlayer">
-            <source src="./{lv_value}_full_audio.mp3" type="audio/mp3" />
+            <source src="./{lv_value}_silent_audio.mp3" type="audio/mp3" />
             Your browser does not support the audio element.
         </audio>
         <input id="seekbar" max="{int(broadcast_data.get('video_duration', 0))}" min="0" step="1" type="range" value="0" />
