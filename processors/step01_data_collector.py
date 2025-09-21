@@ -66,21 +66,12 @@ def get_server_time_from_filename(platform_directory, account_id, lv_value):
         # 対象の動画ファイルを検索
         for filename in os.listdir(account_dir):
             if filename.endswith('.mp4') and lv_value in filename:
-                # ファイル名からタイムスタンプ抽出
-                pattern = r'lv\d+_(\d{4})_(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_'
+                # ファイル名からUNIX時刻を直接抽出
+                pattern = r'^(\d+)_lv\d+_'
                 match = re.search(pattern, filename)
                 
                 if match:
-                    year = int(match.group(1))
-                    month = int(match.group(2))
-                    day = int(match.group(3))
-                    hour = int(match.group(4))
-                    minute = int(match.group(5))
-                    second = int(match.group(6))
-                    
-                    dt = datetime(year, month, day, hour, minute, second)
-                    server_time = str(int(dt.timestamp()))
-                    
+                    server_time = match.group(1)
                     print(f"動画ファイル名からserver_time取得: {server_time}")
                     return "", server_time
         
@@ -149,19 +140,41 @@ def extract_begin_time(html_content):
 def wait_and_parse_ncv_xml(ncv_directory, lv_value, account_id="", display_name=""):
     """NCVのXMLファイル監視・解析（新しいディレクトリ構造対応）"""
     
+    print(f"DEBUGLOG: ncv_directory引数: {ncv_directory}")
+    print(f"DEBUGLOG: account_id: {account_id}")
+    print(f"DEBUGLOG: display_name: {display_name}")
+    
     # 新しいディレクトリ構造を考慮
     if account_id:
         from utils import find_ncv_directory
         actual_ncv_dir = find_ncv_directory(ncv_directory, account_id, display_name)
+        print(f"DEBUGLOG: find_ncv_directory結果: {actual_ncv_dir}")
     else:
         actual_ncv_dir = ncv_directory
+        print(f"DEBUGLOG: actual_ncv_dir (フォールバック): {actual_ncv_dir}")
+    
+    print(f"DEBUGLOG: 実際の探索ディレクトリ: {actual_ncv_dir}")
+    print(f"DEBUGLOG: ディレクトリ存在確認: {os.path.exists(actual_ncv_dir)}")
+    
+    if os.path.exists(actual_ncv_dir):
+        files = os.listdir(actual_ncv_dir)
+        print(f"DEBUGLOG: ディレクトリ内のファイル一覧: {files}")
+        xml_files = [f for f in files if f.endswith('.xml')]
+        print(f"DEBUGLOG: XMLファイル一覧: {xml_files}")
+        lv_xml_files = [f for f in xml_files if lv_value in f]
+        print(f"DEBUGLOG: lv値を含むXMLファイル: {lv_xml_files}")
+    else:
+        print(f"DEBUGLOG: 探索ディレクトリが存在しません: {actual_ncv_dir}")
     
     for i in range(60):
         try:
             xml_file = find_xml_file_containing_lv(actual_ncv_dir, lv_value)
             if xml_file:
+                print(f"DEBUGLOG: XMLファイル発見: {xml_file}")
                 ncv_data = parse_ncv_xml(xml_file)
                 return xml_file, ncv_data
+            else:
+                print(f"DEBUGLOG: XMLファイル未発見 (試行{i+1}/60)")
         except Exception as e:
             print(f"XML解析エラー(試行{i+1}): {str(e)}")
         time.sleep(1)
@@ -217,53 +230,85 @@ def find_xml_file_containing_lv(directory, lv_value):
 def parse_ncv_xml(xml_path):
     """NCVのXMLファイル解析"""
     try:
+        print(f"DEBUG: XML解析開始: {xml_path}")
         tree = ET.parse(xml_path)
         root = tree.getroot()
+        print(f"DEBUG: XMLルート要素: {root.tag}")
         
-        # 名前空間を考慮
-        ns = {'ncv': 'http://posite-c.jp/niconamacommentviewer/commentlog/'}
+        # 名前空間を正しく定義
+        ns = {'': 'http://posite-c.jp/niconamacommentviewer/commentlog/'}
         
-        # LiveInfo取得
-        live_info = root.find('.//LiveInfo', ns) or root.find('.//LiveInfo')
-        player_status = root.find('.//PlayerStatus', ns) or root.find('.//PlayerStatus')
+        # LiveInfoとPlayerStatus要素を取得（名前空間付きで検索）
+        live_info = root.find('.//LiveInfo', ns)
+        print(f"DEBUG: LiveInfo要素: {live_info}")
         
-        # elapsed_timeを取得、空の場合は計算する
-        elapsed_time = get_text_content(root, './/ElapsedTime')
-        if not elapsed_time:
-            # ElapsedTimeが取得できない場合、StartTimeとEndTimeから計算
-            start_time = get_text_content(live_info, './/StartTime')
-            end_time = get_text_content(live_info, './/EndTime')
-            if start_time and end_time:
-                try:
-                    duration_seconds = int(end_time) - int(start_time)
-                    hours = duration_seconds // 3600
-                    minutes = (duration_seconds % 3600) // 60
-                    seconds = duration_seconds % 60
-                    elapsed_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                except ValueError:
-                    elapsed_time = "不明"
+        if live_info is not None:
+            print(f"DEBUG: LiveInfo子要素:")
+            for child in live_info:
+                print(f"  {child.tag}: {child.text}")
+        
+        player_status = root.find('.//PlayerStatus', ns)
+        print(f"DEBUG: PlayerStatus要素: {player_status}")
+        
+        stream = None
+        if player_status is not None:
+            stream = player_status.find('.//Stream', ns)
+            print(f"DEBUG: Stream要素: {stream}")
+            if stream is not None:
+                for child in stream:
+                    print(f"  Stream/{child.tag}: {child.text}")
+        
+        # 各データを個別に取得してログ出力（名前空間付きで）
+        start_time = get_text_content_with_ns(live_info, './/StartTime', ns)
+        print(f"DEBUG: start_time取得結果: '{start_time}'")
+        
+        live_title = get_text_content_with_ns(live_info, './/LiveTitle', ns)
+        print(f"DEBUG: live_title取得結果: '{live_title}'")
         
         data = {
-            'live_num': get_text_content(root, './/LiveNum'),
-            'elapsed_time': elapsed_time,
-            'live_title': get_text_content(live_info, './/LiveTitle'),
-            'broadcaster': get_text_content(live_info, './/Broadcaster'),
-            'default_community': get_text_content(live_info, './/DefaultCommunity'),
-            'community_name': get_text_content(live_info, './/CommunityName'),
-            'open_time': get_text_content(live_info, './/OpenTime'),
-            'start_time': get_text_content(live_info, './/StartTime'),
-            'end_time': get_text_content(live_info, './/EndTime'),
-            'watch_count': get_text_content(player_status, './/WatchCount'),
-            'comment_count': get_text_content(player_status, './/CommentCount'),
-            'owner_id': get_text_content(player_status, './/OwnerId'),
-            'owner_name': get_text_content(player_status, './/OwnerName')
+            'live_num': get_text_content_with_ns(root, './/LiveNum', ns),
+            'elapsed_time': get_text_content_with_ns(root, './/ElapsedTime', ns),
+            'live_title': live_title,
+            'broadcaster': get_text_content_with_ns(live_info, './/Broadcaster', ns),
+            'default_community': get_text_content_with_ns(live_info, './/DefaultCommunity', ns),
+            'community_name': get_text_content_with_ns(live_info, './/CommunityName', ns),
+            'open_time': get_text_content_with_ns(live_info, './/OpenTime', ns),
+            'start_time': start_time,
+            'end_time': get_text_content_with_ns(live_info, './/EndTime', ns),
+            'watch_count': get_text_content_with_ns(stream, './/WatchCount', ns) if stream is not None else '',
+            'comment_count': get_text_content_with_ns(stream, './/CommentCount', ns) if stream is not None else '',
+            'owner_id': get_text_content_with_ns(stream, './/OwnerId', ns) if stream is not None else '',
+            'owner_name': get_text_content_with_ns(stream, './/OwnerName', ns) if stream is not None else ''
         }
         
+        print(f"DEBUG: 解析結果データ: {data}")
         return data
         
     except Exception as e:
         print(f"NCVのXML解析エラー: {str(e)}")
+        import traceback
+        print(f"DEBUG: エラートレースバック: {traceback.format_exc()}")
         raise
+
+def get_text_content_with_ns(element, xpath, ns):
+    """名前空間対応版のテキスト取得"""
+    if element is None:
+        return ""
+    found = element.find(xpath, ns)
+    return found.text if found is not None and found.text else ""
+
+def get_text_content(element, xpath, ns=None):
+    """XMLから安全にテキスト取得"""
+    if element is None:
+        return ""
+    if ns:
+        found = element.find(xpath, ns)
+    else:
+        found = element.find(xpath)
+    if found is None:
+        # 名前空間なしでも試行
+        found = element.find(xpath)
+    return found.text if found is not None and found.text else ""
 
 def get_text_content(element, xpath):
     """XMLから安全にテキスト取得"""

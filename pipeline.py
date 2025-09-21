@@ -75,6 +75,7 @@ def run_pipeline(platform, account_id, platform_directory, ncv_directory, lv_val
         }
         
         # 各ステップを順次実行
+# 各ステップを順次実行
         steps = [
             'step01_data_collector',
             'step02_audio_transcriber',

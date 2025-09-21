@@ -1,0 +1,43 @@
+{
+  "lv_value": "lv348772131",
+  "total_users": 3,
+  "created_at": "2025-09-22T04:41:59.184481",
+  "ranking": [
+    {
+      "user_id": "21639740",
+      "user_name": "アニメ豚太郎",
+      "comment_count": 92,
+      "first_comment": "どうもです　秋アニメは　まどまぎ再放送と　シングレのウマ娘がたのしみです",
+      "first_comment_time": 182,
+      "last_comment": "おつつです",
+      "last_comment_time": 5425,
+      "premium": 0,
+      "anonymity": false,
+      "rank": 1
+    },
+    {
+      "user_id": "o:ProgramExtended",
+      "user_name": "",
+      "comment_count": 3,
+      "first_comment": "/info 3 30分延長しました",
+      "first_comment_time": 1511,
+      "last_comment": "/info 3 30分延長しました",
+      "last_comment_time": 5100,
+      "premium": 2,
+      "anonymity": true,
+      "rank": 2
+    },
+    {
+      "user_id": "a:thiMiBQBEt51miXM",
+      "user_name": "",
+      "comment_count": 1,
+      "first_comment": "富裕層への所得税増税、法人税増税、大企業への租税特別措置の撤廃、金融取引税の強化、消費税の食料品課税ゼロと食料品以外",
+      "first_comment_time": 555,
+      "last_comment": "富裕層への所得税増税、法人税増税、大企業への租税特別措置の撤廃、金融取引税の強化、消費税の食料品課税ゼロと食料品以外",
+      "last_comment_time": 555,
+      "premium": 0,
+      "anonymity": true,
+      "rank": 3
+    }
+  ]
+}

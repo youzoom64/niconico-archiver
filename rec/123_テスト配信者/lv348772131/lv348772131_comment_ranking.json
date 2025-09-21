@@ -1,0 +1,19 @@
+{
+  "lv_value": "lv348772131",
+  "total_users": 1,
+  "created_at": "2025-09-22T04:22:47.199921",
+  "ranking": [
+    {
+      "user_id": "12345678",
+      "user_name": "テストユーザー1",
+      "comment_count": 1,
+      "first_comment": "こんにちは！テスト配信ですね",
+      "first_comment_time": 10,
+      "last_comment": "こんにちは！テスト配信ですね",
+      "last_comment_time": 10,
+      "premium": 0,
+      "anonymity": false,
+      "rank": 1
+    }
+  ]
+}

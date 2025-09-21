@@ -6,6 +6,12 @@ import shutil
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import find_account_directory
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 
 def process(pipeline_data):
     """Step11: comments.jsonを使用したスペシャルユーザー処理"""
@@ -113,7 +119,7 @@ def find_special_users_in_comments(comments_json_path, special_users):
                         'user_name': user_name or f"ユーザー{user_id}",
                         'comments': []
                     }
-                
+
                 # コメント情報を追加（XMLと同じ形式）
                 comment_data = {
                     'no': comment.get('no', ''),
@@ -279,9 +285,12 @@ def create_user_detail_page(user_data, broadcast_data, template_dir, output_dir,
         analysis_text = generate_analysis_text_with_config(user_data['comments'], config, user_id)
     else:
         analysis_text = generate_analysis_text(user_data['comments'])
-    
+    broadcast_url = f"https://live.nicovideo.jp/watch/lv{broadcast_data.get('live_num', '')}"
+
     # テンプレート変数を置換
-    html_content = template.replace('{{broadcast_title}}', broadcast_data.get('live_title', 'タイトル不明'))
+    html_content = template.replace(
+    '{{broadcast_title}}', 
+    f'<a href="{broadcast_url}" target="_blank">{broadcast_data.get("live_title", "タイトル不明")}</a>')
     html_content = html_content.replace('{{start_time}}', format_start_time(broadcast_data.get('start_time', '')))
     html_content = html_content.replace('{{user_avatar}}', get_user_icon_path(user_data['user_id']))
     html_content = html_content.replace('{{user_name}}', user_data['user_name'])
@@ -331,10 +340,14 @@ def generate_analysis_text_with_config(comments, config, user_id):
     """詳細設定を考慮したAI分析テキストを生成"""
     user_detail_config = get_user_detail_config(config, user_id)
     
+    # 基本統計を最初に生成
+    basic_stats = generate_basic_stats(comments)
+    
     if not user_detail_config.get("analysis_enabled", True):
-        return "このユーザーの分析は無効化されています。"
+        return basic_stats + "このユーザーの分析は無効化されています。"
     
     # AI分析が有効な場合
+    ai_analysis = None
     if user_detail_config.get("analysis_prompt"):
         ai_model = user_detail_config.get("analysis_ai_model", "openai-gpt4o")
         
@@ -342,33 +355,45 @@ def generate_analysis_text_with_config(comments, config, user_id):
             ai_analysis = generate_ai_analysis(comments, config, user_detail_config)
         elif ai_model == "google-gemini-2.5-flash":
             ai_analysis = generate_gemini_analysis(comments, config, user_detail_config)
-        else:
-            ai_analysis = None
-        
-        if ai_analysis:
-            return ai_analysis
     
-    # AI分析が失敗した場合は基本分析
-    basic_analysis = generate_analysis_text(comments)
+    # 結果を組み合わせ
+    if ai_analysis:
+        result = basic_stats + ai_analysis
+    else:
+        result = basic_stats
     
     if user_detail_config.get("description"):
-        basic_analysis += f"<br><br><strong>メモ:</strong><br>{user_detail_config['description']}"
+        result += f"<br><br><strong>メモ:</strong><br>{user_detail_config['description']}"
     
-    return basic_analysis
+    return result
+
+def generate_basic_stats(comments):
+    """基本統計情報を生成"""
+    if not comments:
+        return "コメントがありません。<br><br>"
+    
+    total_comments = len(comments)
+    total_chars = sum(len(comment.get('text', '')) for comment in comments)
+    avg_chars = total_chars / total_comments if total_comments > 0 else 0
+    
+    return f"""
+        - 総コメント数: {total_comments}件<br><br>
+        - 平均文字数: {avg_chars:.1f}文字<br><br>
+    """
 
 def generate_ai_analysis(comments, config, user_detail_config):
-    """AI APIを使用してユーザー分析を生成"""
+    """OpenAI APIを使用してユーザー分析を生成"""
     try:
         import openai
         
         # API設定を取得
         api_settings = config.get("api_settings", {})
-        ai_model = user_detail_config.get("analysis_ai_model", "openai-gpt4o")
+        ai_model = user_detail_config.get("analysis_ai_model", "openai-gpt4o")  # OpenAIがデフォルト
         
         # OpenAI APIキーの確認
         openai_api_key = api_settings.get("openai_api_key", "")
-        if not openai_api_key or ai_model == "google-gemini-2.5-flash":
-            print("OpenAI APIキーが設定されていないか、Geminiモデルが選択されています")
+        if not openai_api_key:
+            print("OpenAI APIキーが設定されていません")
             return None
         
         # コメントデータを整理
@@ -422,17 +447,8 @@ def generate_ai_analysis(comments, config, user_detail_config):
         
         ai_result = response.choices[0].message.content.strip()
         
-        # 分析結果にメタ情報を追加
-        metadata = f"""
-<div style="background-color: #f0f8ff; padding: 10px; margin: 10px 0; border-left: 4px solid #0066cc;">
-<strong>AI分析情報</strong><br>
-分析モデル: {ai_model}<br>
-分析日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
-分析対象: {len(comments)}件のコメント
-</div>
-"""
-        
-        return metadata + ai_result
+
+        return ai_result
         
     except Exception as e:
         print(f"AI分析エラー: {str(e)}")
@@ -453,7 +469,10 @@ def generate_gemini_analysis(comments, config, user_detail_config):
         
         # Gemini APIを設定
         genai.configure(api_key=google_api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        # 設定からモデル名を取得
+        ai_model = user_detail_config.get("analysis_ai_model", "google-gemini-2.5-flash")
+        model_name = ai_model.replace("google-", "") if ai_model.startswith("google-") else ai_model
+        model = genai.GenerativeModel(model_name)
         
         # プロンプトを構築（OpenAIと同様）
         comment_texts = []
@@ -510,8 +529,6 @@ def generate_analysis_text(comments):
     analysis = f"""
         - 総コメント数: {total_comments}件<br><br>
         - 平均文字数: {avg_chars:.1f}文字<br><br>
-        - コメント傾向: 配信に対して積極的に参加している様子が伺えます。<br><br>
-        - 参加時間帯: 配信全体を通してコメントを投稿しています。<br><br>
     """
     
     return analysis

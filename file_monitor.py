@@ -96,16 +96,25 @@ class Mp4Monitor:
     def check_file_stability(self, filename):
         """ファイル安定性チェック（5秒後に実行）"""
         try:
+            print(f"DEBUG: [{self.user_name}] check_file_stability開始: {filename}")
+            
             filepath = os.path.join(self.platform_directory, filename)
+            print(f"DEBUG: [{self.user_name}] ファイルパス: {filepath}")
+            
             if not os.path.exists(filepath):
+                print(f"DEBUG: [{self.user_name}] ファイルが存在しません: {filepath}")
                 return
                 
             print(f"DEBUG: [{self.user_name}] ファイル安定判定: {filename}")
             
             lv_value = self.extract_lv_value(filename)
+            print(f"DEBUG: [{self.user_name}] extract_lv_value結果: {lv_value}")
+            
             if lv_value:
                 print(f"DEBUG: [{self.user_name}] lv値抽出成功: {lv_value}")
+                print(f"DEBUG: [{self.user_name}] call_pipeline開始前")
                 self.call_pipeline(lv_value)
+                print(f"DEBUG: [{self.user_name}] call_pipeline完了")
                 # 処理完了後は無視リストに追加
                 self.ignored_files.add(filename)
                 print(f"DEBUG: [{self.user_name}] ファイルを無視リストに追加: {filename}")
@@ -115,9 +124,12 @@ class Mp4Monitor:
             # タイマーをクリーンアップ
             if filename in self.stability_threads:
                 del self.stability_threads[filename]
+                print(f"DEBUG: [{self.user_name}] タイマークリーンアップ完了")
                 
         except Exception as e:
             print(f"DEBUG: [{self.user_name}] 安定性チェックエラー: {str(e)}")
+            import traceback
+            print(f"DEBUG: [{self.user_name}] エラートレースバック: {traceback.format_exc()}")
 
     def find_account_directory(self):
         """アカウントIDを含むディレクトリを検索"""
@@ -192,6 +204,7 @@ class Mp4Monitor:
             
             import sys
             python_executable = sys.executable
+            print(f"DEBUG: [{self.user_name}] Python実行ファイル: {python_executable}")
             
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
@@ -207,6 +220,7 @@ class Mp4Monitor:
             ]
             
             print(f"DEBUG: [{self.user_name}] 実行コマンド: {' '.join(cmd)}")
+            print(f"DEBUG: [{self.user_name}] subprocess.Popen開始")
             
             # Popenでリアルタイム出力
             process = subprocess.Popen(
@@ -218,6 +232,8 @@ class Mp4Monitor:
                 universal_newlines=True,
                 env=env
             )
+            
+            print(f"DEBUG: [{self.user_name}] プロセス開始、出力待機中...")
             
             # リアルタイムで行ごとに出力
             for line in iter(process.stdout.readline, ''):
@@ -231,6 +247,8 @@ class Mp4Monitor:
                 
         except Exception as e:
             print(f"DEBUG: [{self.user_name}] パイプライン呼び出しエラー: {str(e)}")
+            import traceback
+            print(f"DEBUG: [{self.user_name}] エラートレースバック: {traceback.format_exc()}")
 
     def start_watching(self):
         if not self.running:

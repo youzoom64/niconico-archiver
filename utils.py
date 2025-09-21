@@ -84,3 +84,63 @@ def get_user_nickname_with_cache(user_id: str, cache_days=7):
             print(f"キャッシュ保存エラー: {e}")
     
     return nickname
+
+def sanitize_path_component(name: str) -> str:
+    """パス用のサニタイズ"""
+    invalid = '<>:"/\\|?*\t\r\n'
+    table = str.maketrans({ch: "_" for ch in invalid})
+    out = name.translate(table).strip().rstrip(".")
+    return out or "unknown"
+
+def find_account_directory(platform_directory, account_id, display_name=None):
+    """
+    アカウントディレクトリを特定する
+    形式: {platform_directory}/{account_id}_{display_name}/
+    """
+    import os
+    
+    if not platform_directory:
+        platform_directory = os.path.abspath(os.path.join(".", "rec"))
+    
+    if display_name:
+        # display_nameがある場合
+        safe_name = sanitize_path_component(display_name)
+        account_dir = os.path.join(platform_directory, f"{account_id}_{safe_name}")
+    else:
+        # display_nameがない場合は既存ディレクトリを探す
+        if os.path.exists(platform_directory):
+            for item in os.listdir(platform_directory):
+                item_path = os.path.join(platform_directory, item)
+                if os.path.isdir(item_path) and item.startswith(f"{account_id}_"):
+                    account_dir = item_path
+                    break
+            else:
+                # 見つからない場合はaccount_idのみ
+                account_dir = os.path.join(platform_directory, account_id)
+        else:
+            account_dir = os.path.join(platform_directory, account_id)
+    
+    os.makedirs(account_dir, exist_ok=True)
+    return account_dir
+
+def find_ncv_directory(ncv_directory, account_id, display_name=None):
+    """
+    NCVディレクトリを特定する
+    """
+    import os
+    
+    if display_name:
+        safe_name = sanitize_path_component(display_name)
+        target_dir = os.path.join(ncv_directory, f"{account_id}_{safe_name}")
+        if os.path.exists(target_dir):
+            return target_dir
+    
+    # フォールバック: account_idで始まるディレクトリを探す
+    if os.path.exists(ncv_directory):
+        for item in os.listdir(ncv_directory):
+            item_path = os.path.join(ncv_directory, item)
+            if os.path.isdir(item_path) and item.startswith(f"{account_id}_"):
+                return item_path
+    
+    # デフォルト
+    return ncv_directory

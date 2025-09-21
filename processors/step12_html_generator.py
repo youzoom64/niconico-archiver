@@ -44,6 +44,14 @@ def process(pipeline_data):
         # 5. HTMLファイル保存
         html_file = save_html_file(broadcast_dir, lv_value, broadcast_data.get('live_title', 'タイトル不明'), html_content)
         
+        # 6. 統合JSONにHTMLパスを追加
+        broadcast_data['html_file_path'] = os.path.basename(html_file)  # ファイル名のみ
+        
+        # JSONを再保存
+        json_path = os.path.join(broadcast_dir, f"{lv_value}_data.json")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(broadcast_data, f, ensure_ascii=False, indent=2)
+        
         print(f"Step12 完全版完了: {lv_value} - 完全HTML生成: {html_file}")
         return {"html_generated": True, "html_file": html_file}
         
@@ -165,13 +173,19 @@ def prepare_comment_ranking(ranking_data, account_dir, lv_value):
     try:
         comment_ranking = []
         
-        # コメントファイルから全コメントデータを取得
-        comments_file = os.path.join(os.path.dirname(account_dir), lv_value, f"{lv_value}_comments.json")
+        # 正しいパス: account_dir配下のlvディレクトリ
+        broadcast_dir = os.path.join(account_dir, lv_value)
+        comments_file = os.path.join(broadcast_dir, f"{lv_value}_comments.json")
+        
+        print(f"DEBUGLOG: コメントファイルパス: {comments_file}")
+        print(f"DEBUGLOG: ファイル存在確認: {os.path.exists(comments_file)}")
+        
         all_comments = {}
         if os.path.exists(comments_file):
+            # 以下は既存のコード
             with open(comments_file, 'r', encoding='utf-8') as f:
                 comments_data = json.load(f)
-            
+
             # ユーザーID別にコメントをグループ化
             for comment in comments_data.get('comments', []):
                 user_id = comment.get('user_id', '')

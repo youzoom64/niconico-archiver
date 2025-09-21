@@ -1,126 +1,76 @@
-import argparse
-import json
-import os
-from datetime import datetime
-import logging
+# create_user_config.py
+import argparse, os, json, datetime
+from copy import deepcopy
 
-# ログ設定
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-DEBUGLOG = logging.getLogger(__name__)
+TEMPLATE_PATH = os.path.join('config', 'users', 'default_template.json')
+OUT_DIR = os.path.join('config', 'users')
 
-def create_user_config():
-    """コマンドライン引数からユーザー設定JSONを生成"""
-    
-    # 引数パース
-    parser = argparse.ArgumentParser(description='ユーザー設定JSON自動生成')
-    parser.add_argument('-lv_no', required=True, help='放送ID')
-    parser.add_argument('-account_id', required=True, help='アカウントID')
-    parser.add_argument('-lv_title', required=True, help='放送タイトル')
-    parser.add_argument('-display_name', required=True, help='表示名')
-    parser.add_argument('-tab_id', required=True, help='タブID')
-    parser.add_argument('-start_time', required=True, help='開始時刻')
-    
-    args = parser.parse_args()
-    
-    DEBUGLOG.info(f"ユーザー設定生成開始: account_id={args.account_id}, display_name={args.display_name}")
-    
-    # config/usersディレクトリ作成
-    config_dir = os.path.join('config', 'users')
-    os.makedirs(config_dir, exist_ok=True)
-    
-    # JSONファイルパス
-    json_path = os.path.join(config_dir, f'{args.account_id}.json')
-    
-    # 既存ファイルチェック
-    if os.path.exists(json_path):
-        DEBUGLOG.info(f"ユーザー設定が既に存在: {json_path}")
-        return json_path
-    
-    # デフォルト設定テンプレート
-    user_config = {
-        "account_id": args.account_id,
-        "display_name": args.display_name,
-        "basic_settings": {
-            "platform": "niconico",
-            "account_id": args.account_id,
-            "platform_directory": "C:\\project_root\\app_workspaces\\niconico-archiver\\rec",
-            "ncv_directory": "C:\\Users\\youzo\\AppData\\Roaming\\posite-c\\NiconamaCommentViewer\\CommentLog",
-            "download_directory": "C:\\Users\\youzo\\Downloads"
-        },
-        "api_settings": {
-            "summary_ai_model": "",
-            "conversation_ai_model": "",
-            "openai_api_key": "",
-            "google_api_key": "",
-            "suno_api_key": "",
-            "imgur_api_key": ""
-        },
-        "audio_settings": {
-            "use_gpu": True,
-            "whisper_model": "large-v3",
-            "cpu_threads": 8,
-            "beam_size": 5
-        },
-        "ai_features": {
-            "enable_summary_text": False,
-            "enable_summary_image": False,
-            "enable_ai_music": False,
-            "enable_ai_conversation": False
-        },
-        "music_settings": {
-            "style": "",
-            "model": "V4",
-            "instrumental": False
-        },
-        "ai_prompts": {
-            "summary_prompt": "",
-            "intro_conversation_prompt": "",
-            "outro_conversation_prompt": "",
-            "image_prompt": "",
-            "character1_name": "",
-            "character1_personality": "",
-            "character1_image_url": "",
-            "character1_image_flip": True,
-            "character2_name": "",
-            "character2_personality": "",
-            "character2_image_url": "",
-            "character2_image_flip": False,
-            "conversation_turns": 3
-        },
-        "display_features": {
-            "enable_emotion_scores": False,
-            "enable_comment_ranking": False,
-            "enable_word_ranking": False,
-            "enable_thumbnails": False,
-            "enable_audio_player": False,
-            "enable_timeshift_jump": False
-        },
-        "special_users": [],
-        "tags": [],
-        "special_users_config": {
-            "default_analysis_enabled": False,
-            "default_analysis_ai_model": "",
-            "default_analysis_prompt": "",
-            "default_template": "user_detail.html",
-            "users": {}
-        },
-        "last_updated": datetime.now().isoformat()
-    }
-    
-    # JSONファイル書き込み
-    try:
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(user_config, f, ensure_ascii=False, indent=2)
-        DEBUGLOG.info(f"ユーザー設定生成完了: {json_path}")
-        return json_path
-    except Exception as e:
-        DEBUGLOG.error(f"ユーザー設定生成失敗: {e}")
-        raise
+def _load_json(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-if __name__ == "__main__":
-    try:
-        config_path = create_user_config()
-        print(f"ユーザー設定ファイルを生成しました: {config_path}")
-    except Exception as e:
-        print(f"エラー: {e}")
-        exit(1)
+def _deep_merge(base: dict, override: dict) -> dict:
+    out = deepcopy(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+def _build_user_config(template: dict, account_id: str, display_name: str) -> dict:
+    cfg = deepcopy(template) if template else {}
+    # 動的差し込み
+    cfg['account_id'] = account_id
+    cfg['display_name'] = display_name
+    cfg.setdefault('basic_settings', {})
+    cfg['basic_settings']['account_id'] = account_id
+
+    # スペシャルユーザー 2525 をテスト用として固定で入れる
+    cfg.setdefault('special_users', [])
+    if '2525' not in cfg['special_users']:
+        cfg['special_users'] = ['2525']  # テスト運用なので上書きで一本化
+
+    su = cfg.setdefault('special_users_config', {})
+    users = su.setdefault('users', {})
+    if '2525' not in users:
+        users['2525'] = {
+            "user_id": "2525",
+            "display_name": "スペシャルユーザー2525",
+            "analysis_enabled": su.get('default_analysis_enabled', True),
+            "analysis_ai_model": su.get('default_analysis_ai_model', "openai-gpt4o"),
+            "analysis_prompt": su.get('default_analysis_prompt', "以下のユーザーのコメント履歴を分析してください。"),
+            "template": su.get('default_template', "user_detail.html"),
+            "description": "",
+            "tags": []
+        }
+
+    cfg['last_updated'] = datetime.datetime.now().isoformat()
+    return cfg
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-lv_no', required=True)
+    ap.add_argument('-account_id', required=True)
+    ap.add_argument('-lv_title', required=True)
+    ap.add_argument('-display_name', required=True)
+    ap.add_argument('-tab_id', required=True)
+    ap.add_argument('-start_time', required=True)
+    args = ap.parse_args()
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    template = {}
+    if os.path.exists(TEMPLATE_PATH):
+        template = _load_json(TEMPLATE_PATH)
+
+    user_cfg = _build_user_config(template, args.account_id, args.display_name)
+
+    out_path = os.path.join(OUT_DIR, f'{args.account_id}.json')
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(user_cfg, f, ensure_ascii=False, indent=2)
+    print(f'ユーザー設定生成: {out_path}')
+    return 0
+
+if __name__ == '__main__':
+    raise SystemExit(main())

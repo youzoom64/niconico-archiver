@@ -1,4 +1,4 @@
-# bloadcast_checker.py
+# broadcast_checker.py
 # 外部起動用：配信終了を30秒ごとに監視し、終了時に
 # 1) 指定のChromeタブを閉じる（ベストエフォート）
 # 2) download_directory内の recording-*.webm を探す
@@ -40,12 +40,18 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
 
+
 # ===== ログ設定 =====
+os.makedirs('logs', exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler('logs/broadcast_checker.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
 )
-LOG = logging.getLogger("bloadcast_checker")
+LOG = logging.getLogger("broadcast_checker")
 
 # ====== ユーティリティ ======
 def sanitize_path_component(name: str) -> str:
@@ -85,19 +91,70 @@ def attach_debug_chrome(debug_port: int = 9222) -> Optional[webdriver.Chrome]:
         LOG.warning(f"Selenium接続失敗: {e}")
         return None
 
-def close_target_tab_by_id(driver: webdriver.Chrome, tab_id: str) -> bool:
-    """渡された tab_id でタブを閉じる。成功すれば True、失敗すれば False。"""
-    LOG.debug(f"受け取った tab_id: {tab_id}")
-    try:
-        LOG.debug(f"現在の window_handles: {driver.window_handles}")
-        driver.switch_to.window(tab_id)
-        driver.close()
-        LOG.info(f"tab_id でタブをクローズ成功: {tab_id}")
-        return True
-    except Exception as e:
-        LOG.error(f"tab_id でのタブクローズ失敗: {e}")
-        return False
+def close_target_tab_by_id_with_retry(driver: webdriver.Chrome, tab_id: str, max_retries: int = 3, retry_delay: int = 2) -> bool:
+    """
+    渡された tab_id でタブを閉じ、失敗時はリトライする
+    
+    Args:
+        driver: Chromeドライバー
+        tab_id: 閉じるタブのID
+        max_retries: 最大リトライ回数
+        retry_delay: リトライ間隔（秒）
+    
+    Returns:
+        bool: 成功時True、失敗時False
+    """
+    import time
+    
+    for attempt in range(max_retries + 1):  # +1で初回実行を含む
+        try:
+            LOG.debug(f"タブクローズ試行 {attempt + 1}/{max_retries + 1}: {tab_id}")
+            
+            # 現在のタブ一覧を取得
+            current_handles = set(driver.window_handles)
+            LOG.debug(f"現在のwindow_handles: {current_handles}")
+            
+            if tab_id not in current_handles:
+                LOG.info(f"タブは既に存在しません: {tab_id}")
+                return True
+            
+            # タブをクローズ
+            driver.switch_to.window(tab_id)
+            driver.close()
+            
+            # クローズ確認のための待機
+            time.sleep(1)
+            
+            # クローズ後のタブ一覧を取得
+            after_handles = set(driver.window_handles)
+            LOG.debug(f"クローズ後のwindow_handles: {after_handles}")
+            
+            # タブが実際に消えたかチェック
+            if tab_id not in after_handles:
+                LOG.info(f"タブクローズ成功: {tab_id} (試行 {attempt + 1})")
+                return True
+            else:
+                LOG.warning(f"タブクローズ失敗（まだ存在）: {tab_id} (試行 {attempt + 1})")
+                
+                # 最後の試行でない場合はリトライ
+                if attempt < max_retries:
+                    LOG.info(f"{retry_delay}秒後にリトライします")
+                    time.sleep(retry_delay)
+                
+        except Exception as e:
+            LOG.error(f"タブクローズでエラー (試行 {attempt + 1}): {e}")
+            
+            # 最後の試行でない場合はリトライ
+            if attempt < max_retries:
+                LOG.info(f"{retry_delay}秒後にリトライします")
+                time.sleep(retry_delay)
+    
+    LOG.error(f"タブクローズ最終失敗: {tab_id} (全{max_retries + 1}回試行)")
+    return False
 
+def close_target_tab_by_id(driver: webdriver.Chrome, tab_id: str) -> bool:
+    """既存の関数をリトライ版に置き換え"""
+    return close_target_tab_by_id_with_retry(driver, tab_id)
 
 def read_recording_tab_json(lv_no: str) -> Tuple[Optional[str], Optional[int]]:
     """auto_recorder が出力した recording_tab_{lv_no}.json から target_url と start_time を拾う"""
@@ -115,8 +172,7 @@ def read_recording_tab_json(lv_no: str) -> Tuple[Optional[str], Optional[int]]:
 
 def check_broadcast_end(lv_value: str) -> bool:
     """
-    さっき提示の _check_broadcast_end をベースに単体関数化。
-    ※ デバッグ用の「パターン未検出でもTrue」は安全のため外しています。
+    JSON-LDメタデータを使用した改善された終了検知
     """
     try:
         url = f"https://live.nicovideo.jp/watch/{lv_value}"
@@ -129,33 +185,99 @@ def check_broadcast_end(lv_value: str) -> bool:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
         }
+        
         resp = requests.get(url, timeout=30, headers=headers)
         resp.raise_for_status()
+        resp.encoding = 'utf-8'
         html = resp.text
 
+        # 方法1: JSON-LDメタデータから終了時刻を取得
+        json_ld_matches = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>([^<]*)</script>', html, re.IGNORECASE)
+        
+        for json_str in json_ld_matches:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and data.get('@type') == 'BroadcastEvent':
+                    end_date = data.get('endDate')
+                    if end_date:
+                        try:
+                            # ISO形式の日時をパース
+                            end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                            current_datetime = datetime.now(end_datetime.tzinfo)
+                            
+                            if current_datetime > end_datetime:
+                                LOG.info(f"[JSON-LD終了検知] {lv_value}: endDate={end_date}")
+                                return True
+                            else:
+                                LOG.info(f"[JSON-LD継続中] {lv_value}: endDate={end_date}")
+                                return False
+                        except ValueError as ve:
+                            LOG.debug(f"日時パース失敗: {end_date} / {ve}")
+                            continue
+            except (json.JSONDecodeError, KeyError) as je:
+                LOG.debug(f"JSON-LD解析失敗: {je}")
+                continue
+
+        # 方法2: フォールバック - 従来の終了パターンチェック
+        LOG.debug("JSON-LDで判定できないため従来方式で判定")
+        
         end_patterns = [
-            'data-status="endPublication"',
+            # 具体的な日本語メッセージ
+            "タイムシフト非公開番組です",
+            "タイムシフト非公開番組",
+            "非公開番組です",
             "公開終了",
+            "公開期間が終了",
+            "配信終了",
+            "放送は終了",
+            "放送終了",
+            "番組は終了",
+            "番組終了",
+            "視聴できません",
+            "アクセスできません",
+            "終了しました",
+            
+            # data-status 系
+            'data-status="endPublication"',
             'data-status="ended"',
             'data-status="finished"',
+            'data-status="closed"',
+            
+            # その他
             "endPublication",
             "タイムシフト再生中",
-            "放送は終了",
-            "番組は終了",
-            "配信終了",
-            "視聴できません",
         ]
-        for p in end_patterns:
-            if p in html:
-                LOG.info(f"[END DETECTED] {lv_value} : pattern='{p}'")
+        
+        for pattern in end_patterns:
+            if pattern in html:
+                LOG.info(f"[パターン終了検知] {lv_value}: pattern='{pattern}'")
                 return True
 
+        # 方法3: ライブ要素の存在チェック（継続中判定のため）
+        live_indicators = [
+            r'"isLive":\s*true',
+            r'"status":\s*"ON_AIR"',
+            r'class="[^"]*___player___[^"]*"',
+            r'id="js-app"',
+        ]
+        
+        live_found = False
+        for pattern in live_indicators:
+            if re.search(pattern, html, re.IGNORECASE):
+                live_found = True
+                break
+        
+        if not live_found:
+            LOG.info(f"[ライブ要素不在] {lv_value}: ライブ要素が見つからないため終了判定")
+            return True
+
         # 未終了
+        LOG.info(f"[継続中] {lv_value}")
         return False
 
     except Exception as e:
         LOG.error(f"終了チェック失敗 {lv_value}: {e}")
-        # エラー時は「終了扱い」にするかは運用判断。ここでは終了扱いにする。
+        # エラー時は終了扱い
         return True
 
 def pick_and_wait_recording_file(
@@ -215,7 +337,6 @@ def pick_and_wait_recording_file(
     LOG.error(f"録画ファイルが見つからない/安定しない: start_time={start_time_unix}")
     return None
 
-
 def convert_webm_to_mp4(src_webm: str, dst_mp4: str) -> bool:
     """
     ffmpeg で webm -> mp4 へ変換。
@@ -257,21 +378,21 @@ def move_to_library(src_path: str, platform_directory: str, account_id: str, dis
 
 # ===== メイン処理 =====
 def main():
-    parser = argparse.ArgumentParser(description="bloadcast_checker: 配信終了検知と後処理")
+    parser = argparse.ArgumentParser(description="broadcast_checker: 配信終了検知と後処理")
     parser.add_argument("-lv_no", required=True)
     parser.add_argument("-account_id", required=True)
     parser.add_argument("-lv_title", required=True)
     parser.add_argument("-display_name", required=True)
-    parser.add_argument("-tab_id", required=False, default=None)   # 将来利用（現状はURL一致でクローズ）
-    parser.add_argument("-start_time", required=True, type=int)    # UNIX秒
-    parser.add_argument("-debug_port", required=False, type=int, default=9222)  # Chromeデバッグポート
+    parser.add_argument("-tab_id", required=False, default=None)
+    parser.add_argument("-start_time", required=True, type=int)
+    parser.add_argument("-debug_port", required=False, type=int, default=9222)
     args = parser.parse_args()
 
     lv_no = args.lv_no
     account_id = args.account_id
     lv_title = args.lv_title
     display_name = args.display_name
-    tab_id = args.tab_id  # 受けはするがハンドル一致は別プロセスでは保証不可
+    tab_id = args.tab_id
     start_time = args.start_time
     debug_port = args.debug_port
 
@@ -308,7 +429,6 @@ def main():
         time.sleep(30)
 
     # タブを閉じる（ベストエフォート）
-    # タブを閉じる（tab_id 必須）
     driver = attach_debug_chrome(debug_port=debug_port)
     if driver:
         try:
@@ -320,7 +440,7 @@ def main():
                 LOG.error("tab_id が指定されていません。タブを閉じられません")
         finally:
             try:
-                driver.quit()  # セッションを完全に終了
+                driver.quit()
             except Exception:
                 pass
 
@@ -341,20 +461,13 @@ def main():
     if not ok:
         return 5
 
-    # 元のwebmは残す/消すは方針次第。ここでは残す。消したいなら以下を有効化。
-    # try:
-    #     os.remove(webm_path)
-    # except Exception:
-    #     pass
-
     # 移動
     final_path = move_to_library(tmp_out, platform_directory, account_id, display_name)
     if not final_path:
         return 6
 
-    LOG.info("bloadcast_checker: 完了")
+    LOG.info("broadcast_checker: 完了")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

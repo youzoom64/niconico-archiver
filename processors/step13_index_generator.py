@@ -70,7 +70,7 @@ def collect_broadcast_data(account_dir):
                             'comment_count': data.get('comment_count', 0),
                             'elapsed_time': data.get('elapsed_time', ''),
                             'summary_text': data.get('summary_text', ''),
-                            'html_file': html_file,
+                            'html_file': data.get('html_file_path', ''),
                             'image_url': data.get('image_generation', {}).get('imgur_url', ''),
                             'music_urls': get_music_urls_multiple(data),
                             'transcript_segments': get_transcript_segments(item_path, lv_value),
@@ -102,7 +102,7 @@ def find_html_file(broadcast_dir, lv_value):
     """配信ディレクトリからHTMLファイルを検索"""
     for file in os.listdir(broadcast_dir):
         if file.startswith(lv_value) and file.endswith('.html'):
-            return os.path.join(lv_value, file)
+            return file  # ファイル名のみを返す
     return None
 
 def get_music_url(data):
@@ -127,8 +127,14 @@ def get_transcript_text(broadcast_dir, lv_value):
 def process_tags(broadcast_list, tags_config):
     """タグマッチング処理"""
     for broadcast in broadcast_list:
-        # 検索対象テキスト
-        search_text = f"{broadcast['title']} {broadcast['summary_text']} {broadcast['transcript_text']}"
+        # 安全にフィールドを取得
+        title = broadcast.get('title', '')
+        summary_text = broadcast.get('summary_text', '')
+        # transcript_segmentsから文字列を作成
+        transcript_segments = broadcast.get('transcript_segments', [])
+        transcript_text = ' '.join(transcript_segments) if transcript_segments else ''
+        
+        search_text = f"{title} {summary_text} {transcript_text}"
         search_text = search_text.lower()
         
         # 各タグをチェック
@@ -435,6 +441,18 @@ def create_index_html(broadcast_list, all_tags):
                     updatePreviewPosition(e);
                 }});
             }});
+            document.addEventListener('DOMContentLoaded', function() {{
+                // 既存のコード...
+                
+                // タグクリックイベント（追加）
+                document.querySelectorAll('.tag').forEach(tag => {{
+                    tag.addEventListener('click', function(e) {{
+                        e.stopPropagation();
+                        const tagName = this.dataset.tag;
+                        window.location.href = `tags/tag_${{tagName}}.html`;
+                    }});
+                }});
+            }});
         }});
         
         function filterByTag(tag) {{
@@ -507,8 +525,38 @@ def create_index_html(broadcast_list, all_tags):
         
         function updatePreviewPosition(event) {{
             if (previewPopup) {{
-                const x = Math.min(event.pageX + 15, window.innerWidth - previewPopup.offsetWidth - 20);
-                const y = Math.max(event.pageY - previewPopup.offsetHeight - 15, 20);
+                const mouseX = event.clientX;
+                const mouseY = event.clientY;
+                const popupWidth = previewPopup.offsetWidth;
+                const popupHeight = previewPopup.offsetHeight;
+                const windowWidth = window.innerWidth;
+                const windowHeight = window.innerHeight;
+                
+                // X座標: マウスの左側に少し離して配置
+                let x = mouseX - popupWidth - 20;  // マウスから20px左に離す
+                
+                // 左端が窮屈な場合は右側に表示
+                if (x < 10) {{
+                    x = mouseX + 20;  // マウスの右側に表示
+                }}
+                
+                // 右端制限
+                if (x + popupWidth > windowWidth - 10) {{
+                    x = windowWidth - popupWidth - 10;
+                }}
+                
+                // Y座標: マウスの中央（ポップアップの中央がマウス位置になるよう）
+                let y = mouseY - (popupHeight / 2);
+                
+                // 上端制限
+                if (y < 10) {{
+                    y = 10;
+                }}
+                
+                // 下端制限
+                if (y + popupHeight > windowHeight - 10) {{
+                    y = windowHeight - popupHeight - 10;
+                }}
                 
                 previewPopup.style.left = x + 'px';
                 previewPopup.style.top = y + 'px';
@@ -574,13 +622,17 @@ def generate_broadcast_items(broadcast_list):
     items = []
     for broadcast in broadcast_list:
         tags_str = ','.join(broadcast['tags'])
-        tags_html = ''.join([f'<span class="tag">{html.escape(tag)}</span>' for tag in broadcast['tags']])
+        
+        # タグをクリック可能にしてdata-tag属性を追加
+        tags_html = ''
+        for tag in broadcast['tags']:
+            tags_html += f'<span class="tag" data-tag="{html.escape(tag)}" style="cursor: pointer;">{html.escape(tag)}</span>'
         
         start_time_str = datetime.fromtimestamp(int(broadcast['start_time'])).strftime('%Y/%m/%d %H:%M') if broadcast['start_time'] else '不明'
         
         item_html = f"""
             <div class="broadcast-item" data-lv="{broadcast['lv_value']}" data-tags="{html.escape(tags_str)}">
-                <a href="{broadcast['html_file']}" class="broadcast-title">{html.escape(broadcast['title'])}</a>
+                <a href="{broadcast['lv_value']}/{broadcast['html_file']}" class="broadcast-title">{html.escape(broadcast['title'])}</a>
                 <div class="broadcast-info">
                     <div class="info-item">
                         <span class="info-label">配信者:</span> {html.escape(broadcast['broadcaster'])}
@@ -607,17 +659,6 @@ def generate_broadcast_items(broadcast_list):
     
     return '\n        '.join(items)
 
-def process_tags(broadcast_list, tags_config):
-    """タグマッチング処理"""
-    for broadcast in broadcast_list:
-        search_text = f"{broadcast['title']} {broadcast['summary_text']} {broadcast['transcript_text']}"
-        search_text = search_text.lower()
-        
-        for tag in tags_config:
-            if tag.lower() in search_text:
-                broadcast['tags'].append(tag)
-    
-    return broadcast_list
 
 
 def create_tag_html(filtered_broadcasts, tag, all_tags):

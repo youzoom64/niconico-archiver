@@ -19,7 +19,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('niconico_recorder.log', encoding='utf-8'),
+        logging.FileHandler('logs/niconico_recorder.log', encoding='utf-8'),  # パス変更
         logging.StreamHandler()
     ]
 )
@@ -38,7 +38,7 @@ CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 USER_DATA_DIR = r"C:\ChromeDebug"
 PROFILE_NAME = "Default"
 DEBUG_PORT = "9222"
-TARGET_MONITOR = 2
+TARGET_MONITOR = 3
 
 # グローバル変数
 recording_start_time = None
@@ -58,23 +58,49 @@ def _sanitize_path_component(name: str) -> str:
     out = name.translate(table).strip().rstrip('.')
     return out or "unknown"
 
-# 追加: ユーザー設定をロード
+# 置換: load_user_config(account_id)
 def load_user_config(account_id: str):
     """
-    config/users/{account_id}.json を読み込み、辞書を返す。
+    config/users/{account_id}.json を読み込み。
+    併せて default_template.json があれば深いマージで補完して返す。
     失敗時は None を返す。
     """
-    path = os.path.join('config', 'users', f'{account_id}.json')
-    if not os.path.exists(path):
-        DEBUGLOG.warning(f"ユーザー設定が見つかりません: {path}")
-        return None
+    user_path = os.path.join('config', 'users', f'{account_id}.json')
+    tmpl_path = os.path.join('config', 'users', 'default_template.json')
+
+    def _deep_merge(base: dict, override: dict) -> dict:
+        from copy import deepcopy
+        out = deepcopy(base) if base else {}
+        for k, v in (override or {}).items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = _deep_merge(out[k], v)
+            else:
+                out[k] = v
+        return out
+
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        DEBUGLOG.info(f"ユーザー設定読込成功: {path}")
-        return data
+        user = {}
+        tmpl = {}
+        if os.path.exists(tmpl_path):
+            with open(tmpl_path, 'r', encoding='utf-8') as f:
+                tmpl = json.load(f)
+        if os.path.exists(user_path):
+            with open(user_path, 'r', encoding='utf-8') as f:
+                user = json.load(f)
+
+        if tmpl:
+            cfg = _deep_merge(tmpl, user)  # ユーザー設定を優先してテンプレで埋める
+        else:
+            cfg = user
+
+        if cfg:
+            DEBUGLOG.info(f"ユーザー設定読込成功: {user_path if user else '(テンプレのみ)'}")
+            return cfg
+        else:
+            DEBUGLOG.warning(f"ユーザー設定が見つかりません: {user_path}")
+            return None
     except Exception as e:
-        DEBUGLOG.error(f"ユーザー設定の読込に失敗: {path} / {e}")
+        DEBUGLOG.error(f"ユーザー設定の読込に失敗: {account_id}.json / {e}")
         return None
 
 # run_broadcast_checker関数の前に追加
@@ -277,24 +303,46 @@ def connect_selenium():
         DEBUGLOG.error(f"Selenium接続失敗: {e}")
         return None
 
+from screeninfo import get_monitors
+
+def _pick_monitor_by_windows_number(target_number: int):
+    mons = get_monitors()
+    if not mons:
+        raise RuntimeError("モニター情報を取得できません")
+    
+    # 単純にインデックスで選択（1始まり → 0始まりに変換）
+    index = target_number - 1
+    if 0 <= index < len(mons):
+        return mons[index]
+    return mons[0]  # 範囲外なら最初のモニター
+
 def setup_window_and_activate(driver):
-    """ウィンドウをモニター2の(0,0)、300x400に設定してアクティブ化"""
     DEBUGLOG.debug("ウィンドウ設定・アクティブ化開始")
-    monitors = get_monitors()
-    if len(monitors) < 2:
-        DEBUGLOG.error("モニター2が見つかりません")
-        return False
-    monitor2 = monitors[1]
-    target_x = monitor2.x
-    target_y = monitor2.y
-    DEBUGLOG.info(f"ウィンドウ設定: 位置({target_x}, {target_y}), サイズ(300x400)")
+
+    # デバッグ: モニター情報を出力
+    from screeninfo import get_monitors
+    mons = get_monitors()
+    DEBUGLOG.info(f"利用可能モニター数: {len(mons)}")
+    for i, m in enumerate(mons):
+        DEBUGLOG.info(f"モニター{i}: x={m.x}, y={m.y}, width={m.width}, height={m.height}, primary={getattr(m, 'is_primary', False)}")
+    
+    DEBUGLOG.info(f"TARGET_MONITOR設定値: {TARGET_MONITOR}")
+    
+    mon = _pick_monitor_by_windows_number(TARGET_MONITOR)
+    DEBUGLOG.info(f"選択されたモニター: x={mon.x}, y={mon.y}, width={mon.width}, height={mon.height}")
+    
+    target_x, target_y = mon.x, mon.y
+    w, h = 550, 500
+
+    DEBUGLOG.info(f"ウィンドウ設定: 位置({target_x}, {target_y}), サイズ({w}x{h})")
     driver.set_window_position(target_x, target_y)
-    driver.set_window_size(550, 500)
+    driver.set_window_size(w, h)
     time.sleep(1)
-    if not activate_chrome_window():
-        DEBUGLOG.warning("アクティブ化に失敗しましたが処理を続行します")
-    DEBUGLOG.info("ウィンドウ設定・アクティブ化完了")
-    return True
+    
+    # 実際の位置確認
+    actual_rect = driver.get_window_rect()
+    DEBUGLOG.info(f"実際のウィンドウ位置: x={actual_rect['x']}, y={actual_rect['y']}")
+    return True 
 
 def prepare_debug_chrome():
     """デバッグChromeを準備"""
@@ -343,16 +391,36 @@ def save_recording_tab_info(tab_handle, broadcast_id, target_url, tag):
         json.dump(tab_info, f, ensure_ascii=False, indent=2)
     DEBUGLOG.info(f"録画タブ情報保存完了: {filename}")
 
-def activate_and_click(x, y, description):
-    """アクティブ化してからクリック"""
+def get_adjusted_coordinates(base_x, base_y):
+    """ターゲットモニターに配置されたウィンドウの座標に基づいてマウス座標を調整"""
+    try:
+        window_rect = driver.get_window_rect()
+        window_x = window_rect['x']
+        window_y = window_rect['y']
+        
+        # ウィンドウ位置を基準に座標を調整
+        adjusted_x = window_x + base_x
+        adjusted_y = window_y + base_y
+        
+        DEBUGLOG.debug(f"座標調整: 基準({base_x}, {base_y}) → 調整後({adjusted_x}, {adjusted_y})")
+        return adjusted_x, adjusted_y
+    except Exception as e:
+        DEBUGLOG.error(f"座標調整でエラー: {e}")
+        return base_x, base_y
+
+def activate_and_click(base_x, base_y, description):
+    """アクティブ化してからクリック（座標調整版）"""
     DEBUGLOG.info(f"{description}クリック準備開始")
     if not setup_window_and_activate(driver):
         DEBUGLOG.warning(f"ウィンドウ設定に失敗しましたが{description}をクリックします")
-    DEBUGLOG.info(f"{description}をクリック: ({x}, {y})")
-    pyautogui.click(x, y)
+    
+    # 座標をターゲットモニター基準に調整
+    adjusted_x, adjusted_y = get_adjusted_coordinates(base_x, base_y)
+    
+    DEBUGLOG.info(f"{description}をクリック: ({adjusted_x}, {adjusted_y})")
+    pyautogui.click(adjusted_x, adjusted_y)
     DEBUGLOG.info(f"{description}クリック完了")
     return True
-
 def trigger_playback_if_needed():
     """必要に応じて再生促進クリック"""
     DEBUGLOG.info("再生促進処理開始")
@@ -434,8 +502,10 @@ def main():
         time.sleep(1)
 
         start_x, start_y = EXTENSION_COORDINATES['start_button']
-        DEBUGLOG.info(f"スタートボタンをクリック: ({start_x}, {start_y})")
-        pyautogui.click(start_x, start_y)
+        # 直接pyautogui.clickを使っている部分も修正
+        adjusted_start_x, adjusted_start_y = get_adjusted_coordinates(start_x, start_y)
+        DEBUGLOG.info(f"スタートボタンをクリック: ({adjusted_start_x}, {adjusted_start_y})")
+        pyautogui.click(adjusted_start_x, adjusted_start_y)
         DEBUGLOG.info("スタートボタンクリック完了")
 
         # 6) 録画開始時刻記録 & タブ情報保存
@@ -458,15 +528,12 @@ def main():
 
         time.sleep(5)  # ページが安定するまで少し待つ
 
-
         full_screen_button_click()  # フルスクリーンボタンをクリック
         time.sleep(1)
 
         play_button_clickI()  # 再生ボタンをクリック
         time.sleep(1)
 
-
-        # main関数内で、run_broadcast_checkerを呼び出す前に追加
         # 8) ユーザー設定自動生成（必要な場合）
         create_user_config_if_needed(
             account_id=broadcaster_id,
@@ -487,6 +554,20 @@ def main():
             start_time=recording_start_time
         )
 
+        # broadcast_checkerが一時ファイルを読み込むまで待機
+        DEBUGLOG.info("broadcast_checkerの起動と初期化を待機中...")
+        time.sleep(5)
+
+        # 最後に一時ファイルを削除
+        recording_tab_file = f"recording_tab_{broadcast_id}.json"
+        if os.path.exists(recording_tab_file):
+            try:
+                os.remove(recording_tab_file)
+                DEBUGLOG.info(f"一時ファイル削除完了: {recording_tab_file}")
+            except Exception as e:
+                DEBUGLOG.warning(f"一時ファイル削除で例外: {e}")
+        else:
+            DEBUGLOG.info(f"一時ファイルは既に存在しません: {recording_tab_file}")
         return True
 
     except Exception as e:
@@ -494,7 +575,7 @@ def main():
         return False
 
 if __name__ == "__main__":
-    success = main()
+    success = bool(main())
     if success:
         DEBUGLOG.info("録画開始処理完了")
     else:

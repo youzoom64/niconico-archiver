@@ -102,7 +102,7 @@ def generate_screenshots(mp4_path, screenshot_dir, video_duration, time_diff_sec
             ]
             
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=30)
                 if result.returncode == 0:
                     screenshot_count += 1
                     print(f"録画{recording_seconds}秒 → 配信{broadcast_seconds}秒 → タイムブロック{timeline_position}秒 → {output_path}")
