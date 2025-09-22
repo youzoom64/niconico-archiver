@@ -1,0 +1,12 @@
+{
+  "system": {
+    "download_directory": "C:/Users/youzo/Downloads",
+    "chrome_debug_port": 9222,
+    "ffmpeg_path": "ffmpeg"
+  },
+  "recording": {
+    "default_format": "mp4",
+    "quality_preset": "veryfast",
+    "crf": 18
+  }
+}
