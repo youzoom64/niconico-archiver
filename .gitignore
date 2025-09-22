@@ -93,3 +93,4 @@ ffmpeg*.log
 __pycache__/
 *.pyc
 logs/*.log
+config/users/*.json
