@@ -11,66 +11,66 @@ from faster_whisper import WhisperModel
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import find_account_directory
 
+def save_transcript_json(broadcast_dir, lv_value, transcripts):
+    """transcript.json保存（空でも必ず保存）"""
+    try:
+        from datetime import datetime
+        
+        # 空の場合の特別なメタデータ
+        if not transcripts:
+            print("空の文字起こしデータでJSONを生成します（ダミーセグメント付き）")
+            transcript_data = {
+                "lv_value": lv_value,
+                "total_segments": 1,
+                "creation_time": datetime.now().isoformat(),
+                "status": "no_audio_or_failed",
+                "transcripts": [
+                    {
+                        "timestamp": 0,
+                        "timeline_block": 0,
+                        "text": "[音声なし/処理失敗]",
+                        "positive_score": 0.0,
+                        "center_score": 0.0,
+                        "negative_score": 0.0
+                    }
+                ]
+            }
+        else:
+            transcript_data = {
+                "lv_value": lv_value,
+                "total_segments": len(transcripts),
+                "creation_time": datetime.now().isoformat(),
+                "status": "completed",
+                "transcripts": transcripts
+            }
+        
+        # ディレクトリが存在しない場合は作成
+        os.makedirs(broadcast_dir, exist_ok=True)
+        
+        json_path = os.path.join(broadcast_dir, f"{lv_value}_transcript.json")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(transcript_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"transcript.json保存完了: {json_path} (セグメント数: {len(transcript_data['transcripts'])})")
+        
+    except Exception as e:
+        print(f"transcript.json保存エラー: {str(e)}")
+        raise
+
 def get_optimal_device_config():
     """最適なデバイスと設定を取得"""
     if torch.cuda.is_available():
         device = "cuda"
-        compute_type = "float16"  # GPU用
+        compute_type = "float16"
         print(f"GPU利用可能: {torch.cuda.get_device_name()}")
         print(f"CUDA Version: {torch.version.cuda}")
     else:
         device = "cpu"
-        compute_type = "int8"  # CPU用
+        compute_type = "int8"
         print("GPU利用不可、CPUモードで実行")
     
     return device, compute_type
 
-def process(pipeline_data):
-    """Step02: 音声抽出と文字起こし"""
-    try:
-        lv_value = pipeline_data['lv_value']
-        account_id = pipeline_data['account_id']
-        platform_directory = pipeline_data['platform_directory']
-        
-        print(f"Step02 開始: {lv_value}")
-        
-        # 1. アカウントディレクトリ検索（utils.pyの関数を使用）
-        account_dir = find_account_directory(platform_directory, account_id)
-        
-        # 2. 放送ディレクトリ取得
-        broadcast_dir = os.path.join(account_dir, lv_value)
-        
-        # 3. MP4ファイル検索
-        mp4_path = find_mp4_file(account_dir, lv_value)
-        if not mp4_path:
-            print(f"MP4ファイルが見つかりません: {lv_value} - 空の文字起こしを生成します")
-            # MP4ファイルがなくても空のJSONを作成
-            save_transcript_json(broadcast_dir, lv_value, [])
-            return {"transcript_file": os.path.join(broadcast_dir, f"{lv_value}_transcript.json")}
-        
-        # 4. JSONからparsec取得
-        parsec = get_time_diff_from_json(broadcast_dir, lv_value)
-        
-        # 5. 音声抽出・分割
-        audio_files = extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec)
-        
-        # 6. 文字起こし実行
-        transcripts = transcribe_audio_files(audio_files, parsec, pipeline_data.get('config'))
-        
-        # 7. transcript.json保存（音声がなくても必ず実行）
-        save_transcript_json(broadcast_dir, lv_value, transcripts)
-        
-        print(f"Step02 完了: {lv_value}")
-        return {"transcript_file": os.path.join(broadcast_dir, f"{lv_value}_transcript.json")}
-        
-    except Exception as e:
-        print(f"Step02 エラー: {str(e)} - 空の文字起こしを生成します")
-        # エラー時も空のJSONを作成
-        try:
-            save_transcript_json(broadcast_dir, lv_value, [])
-            return {"transcript_file": os.path.join(broadcast_dir, f"{lv_value}_transcript.json")}
-        except:
-            raise e
 
 def find_mp4_file(account_dir, lv_value):
     """MP4ファイルを検索"""
@@ -104,7 +104,7 @@ def get_time_diff_from_json(broadcast_dir, lv_value):
         return 0
 
 def extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec=0):
-    """動画から音声抽出・分割（音声なし対応版）"""
+    """動画から音声抽出・分割（エラー修正版）"""
     try:
         print(f"音声抽出開始: {mp4_path}")
         
@@ -115,20 +115,33 @@ def extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec=0):
         if video.audio is None:
             print("警告: 動画に音声トラックがありません - 空の文字起こしを生成します")
             video.close()
-            return []  # 空のリストを返す
+            return []
         
         audio = video.audio
         
         # 音声の長さチェック
-        if audio.duration < 1.0:  # 1秒未満
+        if audio.duration < 1.0:
             print("警告: 音声が短すぎます（1秒未満） - 空の文字起こしを生成します")
             video.close()
             audio.close()
             return []
         
-        # 全体音声保存
+        # 全体音声保存（mp3形式で直接保存）
         full_audio_path = os.path.join(broadcast_dir, f"{lv_value}_full_audio.mp3")
-        audio.write_audiofile(full_audio_path, codec="mp3", verbose=False, logger=None)
+        
+        # 音声書き出し時のパラメータ調整
+        audio.write_audiofile(
+            full_audio_path, 
+            codec="mp3", 
+            verbose=False, 
+            logger=None,
+            bitrate="192k",  # ビットレート指定
+            temp_audiofile=None  # 一時ファイル無効化
+        )
+        
+        # moviepyリソース早期解放
+        audio.close()
+        video.close()
         
         # 音声を読み込み
         audio_segment = AudioSegment.from_mp3(full_audio_path)
@@ -144,7 +157,7 @@ def extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec=0):
             audio_segment.export(silent_audio_path, format="mp3")
         
         # 180分（10800秒）ごとに分割
-        duration = 10800  # 180分
+        duration = 10800
         audio_files = []
         
         total_length = len(audio_segment)
@@ -156,20 +169,32 @@ def extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec=0):
             chunk_path = os.path.join(broadcast_dir, f"{lv_value}_audio_chunk_{chunk_num}.mp3")
             
             audio_chunk = audio_segment[start:end]
-            audio_chunk.export(chunk_path, format="mp3")
+            
+            # pydubでMP3出力時のパラメータ指定
+            audio_chunk.export(
+                chunk_path, 
+                format="mp3",
+                bitrate="192k",
+                parameters=["-ar", "16000"]  # サンプリングレート調整
+            )
             
             start_seconds = start // 1000
             audio_files.append((chunk_path, start_seconds))
             print(f"音声チャンク保存: chunk_{chunk_num} (開始: {start_seconds}秒)")
         
-        video.close()
-        audio.close()
-        
         return audio_files
         
     except Exception as e:
         print(f"音声抽出エラー: {str(e)} - 空の文字起こしを生成します")
-        return []  # エラー時も空のリストを返す
+        # エラー時も確実にリソース解放
+        try:
+            if 'audio' in locals():
+                audio.close()
+            if 'video' in locals():
+                video.close()
+        except:
+            pass
+        return []
 
 def transcribe_audio_files(audio_files, parsec, config=None):
     """音声ファイルリストを文字起こし（空リスト対応版）"""
@@ -322,39 +347,53 @@ def transcribe_audio_files_cpu_fallback(audio_files, parsec):
         print(f"CPU文字起こしエラー: {str(e)}")
         return []  # エラー時も空のリストを返す
 
-def save_transcript_json(broadcast_dir, lv_value, transcripts):
-    """transcript.json保存（空でも必ず保存）"""
+def process(pipeline_data):
+    """Step02: 音声抽出と文字起こし"""
+    lv_value = pipeline_data['lv_value']
+    account_id = pipeline_data['account_id']
+    platform_directory = pipeline_data['platform_directory']
+    
+    print(f"Step02 開始: {lv_value}")
+    
+    # 1. アカウントディレクトリ検索
+    account_dir = find_account_directory(platform_directory, account_id)
+    
+    # 2. 放送ディレクトリ取得
+    broadcast_dir = os.path.join(account_dir, lv_value)
+    os.makedirs(broadcast_dir, exist_ok=True)
+    
+    # 3. **最初に強制的に空のJSONを作成（保険）**
+    transcript_file_path = os.path.join(broadcast_dir, f"{lv_value}_transcript.json")
+    save_transcript_json(broadcast_dir, lv_value, [])
+    print(f"空のtranscript.jsonを作成: {transcript_file_path}")
+    
     try:
-        from datetime import datetime
+        # 4. MP4ファイル検索
+        mp4_path = find_mp4_file(account_dir, lv_value)
+        if not mp4_path:
+            print(f"MP4ファイルが見つかりません: {lv_value} - 空のJSONを維持")
+            return {"transcript_file": transcript_file_path}
         
-        # 空の場合の特別なメタデータ
-        if not transcripts:
-            print("空の文字起こしデータでJSONを生成します")
-            transcript_data = {
-                "lv_value": lv_value,
-                "total_segments": 0,
-                "creation_time": datetime.now().isoformat(),
-                "status": "no_audio_or_failed",  # ステータス追加
-                "transcripts": []
-            }
+        # 5. JSONからparsec取得
+        parsec = get_time_diff_from_json(broadcast_dir, lv_value)
+        
+        # 6. 音声抽出・分割
+        audio_files = extract_and_split_audio(mp4_path, broadcast_dir, lv_value, parsec)
+        
+        # 7. 文字起こし実行
+        transcripts = transcribe_audio_files(audio_files, parsec, pipeline_data.get('config'))
+        
+        # 8. 実際のデータでJSONを上書き（成功時のみ）
+        if transcripts:
+            save_transcript_json(broadcast_dir, lv_value, transcripts)
+            print(f"transcript.jsonを実際のデータで更新: {len(transcripts)}セグメント")
         else:
-            transcript_data = {
-                "lv_value": lv_value,
-                "total_segments": len(transcripts),
-                "creation_time": datetime.now().isoformat(),
-                "status": "completed",  # 正常完了ステータス
-                "transcripts": transcripts
-            }
+            print("文字起こし結果が空のため、空のJSONを維持")
         
-        # ディレクトリが存在しない場合は作成
-        os.makedirs(broadcast_dir, exist_ok=True)
-        
-        json_path = os.path.join(broadcast_dir, f"{lv_value}_transcript.json")
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(transcript_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"transcript.json保存完了: {json_path} (セグメント数: {len(transcripts)})")
+        print(f"Step02 完了: {lv_value}")
+        return {"transcript_file": transcript_file_path}
         
     except Exception as e:
-        print(f"transcript.json保存エラー: {str(e)}")
-        raise
+        print(f"Step02 処理エラー: {str(e)} - 空のJSONを維持します")
+        # 既に空のJSONが作成済みなので、そのまま返す
+        return {"transcript_file": transcript_file_path}

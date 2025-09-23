@@ -1,4 +1,4 @@
 @echo off
 cd /d %~dp0
-venv\Scripts\python.exe auto_recorder.py %*
+venv\Scripts\python.exe main_recorder.py %*
 pause

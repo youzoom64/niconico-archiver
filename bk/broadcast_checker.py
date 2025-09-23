@@ -32,6 +32,7 @@ import subprocess
 import time
 from datetime import datetime
 from typing import Optional, Tuple
+from urllib.parse import urljoin
 
 import requests
 
@@ -71,6 +72,25 @@ def load_user_config(account_id: str) -> Optional[dict]:
     except Exception as e:
         LOG.error(f"ユーザー設定読込失敗: {path} / {e}")
         return None
+
+def load_global_config() -> dict:
+    """グローバル設定を読み込み"""
+    path = os.path.join("config", "global_config.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            LOG.error(f"グローバル設定読込失敗: {path} / {e}")
+    
+    # デフォルト値
+    return {
+        "system": {
+            "download_directory": "Downloads",
+            "platform_directory": "rec"
+        }
+    }
+
 
 def ensure_output_dir(platform_directory: str, account_id: str, display_name: str) -> str:
     safe_name = sanitize_path_component(display_name)
@@ -172,9 +192,10 @@ def read_recording_tab_json(lv_no: str) -> Tuple[Optional[str], Optional[int]]:
 
 def check_broadcast_end(lv_value: str) -> bool:
     """
-    JSON-LDメタデータを使用した改善された終了検知
+    nicolive_endcheck_discovery.py のロジックを使用した改善された終了検知
     """
     try:
+        # 1) ウォッチページHTML取得
         url = f"https://live.nicovideo.jp/watch/{lv_value}"
         headers = {
             "User-Agent": (
@@ -184,101 +205,210 @@ def check_broadcast_end(lv_value: str) -> bool:
             ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache"
         }
         
-        resp = requests.get(url, timeout=30, headers=headers)
+        resp = requests.get(url, timeout=30, headers=headers, allow_redirects=True)
         resp.raise_for_status()
         resp.encoding = 'utf-8'
         html = resp.text
 
-        # 方法1: JSON-LDメタデータから終了時刻を取得
-        json_ld_matches = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>([^<]*)</script>', html, re.IGNORECASE)
-        
-        for json_str in json_ld_matches:
-            try:
-                data = json.loads(json_str)
-                if isinstance(data, dict) and data.get('@type') == 'BroadcastEvent':
-                    end_date = data.get('endDate')
-                    if end_date:
-                        try:
-                            # ISO形式の日時をパース
-                            end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                            current_datetime = datetime.now(end_datetime.tzinfo)
-                            
-                            if current_datetime > end_datetime:
-                                LOG.info(f"[JSON-LD終了検知] {lv_value}: endDate={end_date}")
-                                return True
-                            else:
-                                LOG.info(f"[JSON-LD継続中] {lv_value}: endDate={end_date}")
-                                return False
-                        except ValueError as ve:
-                            LOG.debug(f"日時パース失敗: {end_date} / {ve}")
-                            continue
-            except (json.JSONDecodeError, KeyError) as je:
-                LOG.debug(f"JSON-LD解析失敗: {je}")
-                continue
+        # 2) <script src> 抽出
+        script_urls = _extract_script_srcs(html, resp.url)
 
-        # 方法2: フォールバック - 従来の終了パターンチェック
-        LOG.debug("JSON-LDで判定できないため従来方式で判定")
+        # 3) /v*/programs/ API URLを自動発見
+        api_base = _discover_program_api_base(html, script_urls)
+        status = "UNKNOWN"
         
-        end_patterns = [
-            # 具体的な日本語メッセージ
-            "タイムシフト非公開番組です",
-            "タイムシフト非公開番組",
-            "非公開番組です",
-            "公開終了",
-            "公開期間が終了",
-            "配信終了",
-            "放送は終了",
-            "放送終了",
-            "番組は終了",
-            "番組終了",
-            "視聴できません",
-            "アクセスできません",
-            "終了しました",
-            
-            # data-status 系
-            'data-status="endPublication"',
-            'data-status="ended"',
-            'data-status="finished"',
-            'data-status="closed"',
-            
-            # その他
-            "endPublication",
-            "タイムシフト再生中",
-        ]
-        
-        for pattern in end_patterns:
-            if pattern in html:
-                LOG.info(f"[パターン終了検知] {lv_value}: pattern='{pattern}'")
-                return True
+        if api_base:
+            status = _read_status_from_api(api_base, lv_value, referer=resp.url)
+            LOG.info(f"[API検知] {lv_value}: status={status}")
 
-        # 方法3: ライブ要素の存在チェック（継続中判定のため）
-        live_indicators = [
-            r'"isLive":\s*true',
-            r'"status":\s*"ON_AIR"',
-            r'class="[^"]*___player___[^"]*"',
-            r'id="js-app"',
-        ]
-        
-        live_found = False
-        for pattern in live_indicators:
-            if re.search(pattern, html, re.IGNORECASE):
-                live_found = True
-                break
-        
-        if not live_found:
-            LOG.info(f"[ライブ要素不在] {lv_value}: ライブ要素が見つからないため終了判定")
-            return True
+        # 4) API取得失敗時はHTMLフォールバック
+        if status in ("NOT_FOUND", "UNKNOWN"):
+            fallback_status = _infer_status_from_html(html)
+            status = fallback_status if fallback_status != "UNKNOWN" else status
+            LOG.info(f"[HTML検知] {lv_value}: status={status}")
 
-        # 未終了
-        LOG.info(f"[継続中] {lv_value}")
-        return False
+        # 終了判定
+        is_ended = (status == "ENDED")
+        LOG.info(f"[終了判定] {lv_value}: {status} -> {'終了' if is_ended else '継続中'}")
+        return is_ended
 
     except Exception as e:
         LOG.error(f"終了チェック失敗 {lv_value}: {e}")
-        # エラー時は終了扱い
-        return True
+        return True  # エラー時は終了扱い
+
+def _extract_script_srcs(html: str, base_url: str) -> list:
+    """HTML内の<script src>を抽出"""
+    srcs = []
+    for m in re.finditer(r'<script[^>]+src="([^"]+)"', html):
+        src = m.group(1)
+        srcs.append(urljoin(base_url, src))
+    return srcs
+
+def _discover_program_api_base(html: str, script_urls: list) -> str:
+    """HTML/JSから /v*/programs/ APIベースURLを発見"""
+    # 1) HTML直書きから探す
+    m = re.search(r'https://[^"\'\s]+/v\d+/programs/', html)
+    if m:
+        LOG.debug(f"HTMLからAPI発見: {m.group(0)}")
+        return m.group(0)
+    
+    # 2) 外部JSから探す
+    pat = re.compile(r'https://[^"\'\s]+/v\d+/programs/')
+    for js_url in script_urls:
+        try:
+            js_resp = requests.get(js_url, timeout=10, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"})
+            js_resp.raise_for_status()
+            m = pat.search(js_resp.text)
+            if m:
+                LOG.debug(f"JSからAPI発見: {m.group(0)} (from {js_url})")
+                return m.group(0)
+        except Exception as e:
+            LOG.debug(f"JS取得失敗: {js_url} / {e}")
+            continue
+    
+    LOG.warning("API URLを発見できませんでした")
+    return None
+
+def _read_status_from_api(api_base: str, lv: str, referer: str) -> str:
+    """API から status を取得"""
+    api_url = api_base + lv
+    
+    headers_try = [
+        {  # PCフロント
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+            "Referer": referer,
+            "Origin": "https://live.nicovideo.jp",
+            "Accept": "application/json",
+            "X-Frontend-Id": "9",
+        },
+        {  # SPフロント  
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+            "Referer": referer.replace("https://live.nicovideo.jp", "https://sp.live.nicovideo.jp"),
+            "Origin": "https://sp.live.nicovideo.jp", 
+            "Accept": "application/json",
+            "X-Frontend-Id": "6",
+        },
+        {  # 予備
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+            "Referer": referer,
+            "Accept": "application/json",
+        },
+    ]
+
+    for i, headers in enumerate(headers_try):
+        try:
+            LOG.debug(f"API試行 {i+1}/{len(headers_try)}: {api_url}")
+            r = requests.get(api_url, headers=headers, timeout=12)
+            
+            if r.status_code == 404:
+                LOG.debug(f"API 404: {api_url}")
+                continue
+                
+            if 200 <= r.status_code < 300:
+                body = r.text.strip()
+                
+                # 正規表現でstatusを直接抽出
+                m = re.search(r'"status"\s*:\s*"(ENDED|ON_AIR|RESERVED|TIMESHIFT)"', body)
+                if m:
+                    status = m.group(1)
+                    LOG.debug(f"API成功: status={status}")
+                    return status
+
+                # XSSIガード等を剥がしてJSONパース試行
+                for prefix in (")]}',", "throw 1; < don't be evil >"):
+                    if body.startswith(prefix):
+                        body = body[len(prefix):].lstrip()
+
+                if body.startswith("{") or body.startswith("["):
+                    try:
+                        data = json.loads(body)
+                        prog = data.get("data", {}).get("program") or data.get("program") or {}
+                        st = prog.get("status")
+                        if st:
+                            LOG.debug(f"JSON解析成功: status={st}")
+                            return st
+                    except json.JSONDecodeError:
+                        pass
+
+                LOG.debug(f"APIレスポンス解析失敗: status_code={r.status_code}")
+                return "UNKNOWN"
+                
+        except Exception as e:
+            LOG.debug(f"API呼び出し失敗 {i+1}: {e}")
+            continue
+
+    LOG.warning(f"全API試行失敗: {api_url}")
+    return "NOT_FOUND"
+
+def _infer_status_from_html(html: str) -> str:
+    """HTMLから status を推定（フォールバック）"""
+    import time
+    from datetime import datetime
+    
+    # JSON-LD から status / endDate
+    for m in re.finditer(r'<script[^>]+type="application/(?:ld\+json|json)"[^>]*>(.*?)</script>', html, re.S):
+        blob = m.group(1).strip()
+        try:
+            data = json.loads(blob)
+            txt = json.dumps(data, ensure_ascii=False)
+            
+            # status直接取得
+            ms = re.search(r'"status"\s*:\s*"(ENDED|ON_AIR|RESERVED|TIMESHIFT)"', txt)
+            if ms:
+                LOG.debug(f"JSON-LD status: {ms.group(1)}")
+                return ms.group(1)
+            
+            # endDate判定
+            me = re.search(r'"endDate"\s*:\s*"([^"]+)"', txt)
+            if me:
+                try:
+                    dt = datetime.fromisoformat(me.group(1).replace('Z', '+00:00'))
+                    if dt.tzinfo and dt.timestamp() <= time.time():
+                        LOG.debug(f"JSON-LD endDate終了: {me.group(1)}")
+                        return "ENDED"
+                except Exception:
+                    pass
+        except json.JSONDecodeError:
+            continue
+
+    # 終了系ワード（優先）
+    ended_patterns = [
+        "タイムシフト非公開番組です",
+        "タイムシフト再生中はコメントできません", 
+        "この番組は終了しました",
+        "放送は終了",
+        "配信は終了",
+        "公開期間が終了",
+        "視聴期間が終了",
+        'data-status="ended"',
+        'data-status="endPublication"',
+        "endPublication"
+    ]
+    
+    for pattern in ended_patterns:
+        if pattern in html:
+            LOG.debug(f"終了パターン検知: {pattern}")
+            return "ENDED"
+
+    # 放送中の手掛かり
+    onair_patterns = [
+        "ただいま放送中",
+        "ライブ配信", 
+        "視聴する",
+        'isLiveBroadcast":true',
+        '"isLive":true',
+        '"status":"ON_AIR"'
+    ]
+    
+    if any(pattern in html for pattern in onair_patterns):
+        LOG.debug("放送中パターン検知")
+        return "ON_AIR"
+
+    LOG.debug("HTMLからstatus判定不可")
+    return "UNKNOWN"
 
 def pick_and_wait_recording_file(
     download_dir: str,
@@ -398,21 +528,20 @@ def main():
 
     LOG.info(f"開始: lv_no={lv_no}, account_id={account_id}, lv_title={lv_title}, display_name={display_name}, start_time={start_time}, tab_id={tab_id}")
 
-    # 設定ロード
-    user_cfg = load_user_config(account_id)
-    if not user_cfg:
-        return 1
-
-    basic = user_cfg.get("basic_settings", {}) or {}
-    download_directory = basic.get("download_directory")
-    platform_directory = basic.get("platform_directory")
+    # グローバル設定ロード
+    global_cfg = load_global_config()
+    system_cfg = global_cfg.get("system", {})
+    download_directory = system_cfg.get("download_directory")
+    platform_directory = system_cfg.get("platform_directory")
 
     if not download_directory:
-        LOG.error("config から download_directory を取得できませんでした")
+        LOG.error("グローバル設定から download_directory を取得できませんでした")
         return 2
     if not platform_directory:
-        LOG.error("config から platform_directory を取得できませんでした")
+        LOG.error("グローバル設定から platform_directory を取得できませんでした")
         return 3
+
+    LOG.info(f"使用設定: download_directory={download_directory}, platform_directory={platform_directory}")
 
     # recording_tab_{lv_no}.json からURL（と開始時刻の補助）を拾う
     saved_target_url, saved_start_time = read_recording_tab_json(lv_no)

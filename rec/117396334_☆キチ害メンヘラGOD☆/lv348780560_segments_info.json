@@ -1,0 +1,16 @@
+{
+  "broadcast_id": "lv348780560",
+  "total_segments": 1,
+  "segments": [
+    {
+      "segment_id": 0,
+      "start_time": 1758600291,
+      "end_time": 1758600305,
+      "file": "segment_000.mp4",
+      "broadcast_id": "lv348780560"
+    }
+  ],
+  "gaps": [],
+  "final_video": "C:\\project_root\\app_workspaces\\niconico-archiver\\rec\\117396334_☆キチ害メンヘラGOD☆\\lv348780560_complete.mp4",
+  "created_at": 1758600320
+}

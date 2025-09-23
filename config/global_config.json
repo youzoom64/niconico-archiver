@@ -1,6 +1,8 @@
 {
   "system": {
     "download_directory": "C:/Users/youzo/Downloads",
+    "ncv_directory": "C:/Users/youzo/AppData/Roaming/posite-c/NiconamaCommentViewer/CommentLog",
+    "platform_directory": "C:/project_root/app_workspaces/niconico-archiver/rec",
     "chrome_debug_port": 9222,
     "ffmpeg_path": "ffmpeg"
   },

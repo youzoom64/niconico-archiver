@@ -54,9 +54,13 @@ class Mp4Monitor:
 
     def initialize_ignored_files(self):
         """起動時の既存ファイルを無視リストに追加"""
+        print(f"DEBUG: [{self.user_name}] initialize_ignored_files開始")  # 追加
         try:
+            print(f"DEBUG: [{self.user_name}] ディレクトリチェック: {self.platform_directory}")  # 追加
             if os.path.exists(self.platform_directory):
+                print(f"DEBUG: [{self.user_name}] ディレクトリ存在確認OK")  # 追加
                 existing_files = self.get_mp4_files_with_size()
+                print(f"DEBUG: [{self.user_name}] 既存ファイル検索結果: {existing_files}")  # 追加
                 self.ignored_files = set(existing_files.keys())
                 if self.ignored_files:
                     print(f"DEBUG: [{self.user_name}] 既存ファイルを無視リストに追加: {list(self.ignored_files)}")
