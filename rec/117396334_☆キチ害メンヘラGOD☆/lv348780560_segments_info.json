@@ -4,13 +4,13 @@
   "segments": [
     {
       "segment_id": 0,
-      "start_time": 1758600291,
-      "end_time": 1758600305,
+      "start_time": 1758600797,
+      "end_time": 1758600813,
       "file": "segment_000.mp4",
       "broadcast_id": "lv348780560"
     }
   ],
   "gaps": [],
   "final_video": "C:\\project_root\\app_workspaces\\niconico-archiver\\rec\\117396334_☆キチ害メンヘラGOD☆\\lv348780560_complete.mp4",
-  "created_at": 1758600320
+  "created_at": 1758600827
 }

@@ -147,9 +147,6 @@ def main():
         chrome_manager.driver.set_window_size(650, 500)
         time.sleep(0.3)
 
-        # 配信終了監視開始
-        broadcast_monitor.start_monitoring()
-
         # 2. 録画アイコンクリック → スタートクリック
         recording_start_time = segment_manager.start_segment_recording(broadcast_id, broadcast_title)
 
@@ -180,7 +177,7 @@ def main():
             tab_id=tab_handle,
             start_time=recording_start_time
         )
-
+        broadcast_monitor.start_monitoring() 
         # メインループ（配信終了まで待機）
         try:
             while not broadcast_monitor.is_broadcast_ended():

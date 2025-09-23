@@ -11,52 +11,41 @@ class RecordingController:
         self.extension_coordinates = extension_coordinates
         self.recording_active = False
 
-    def activate_and_click(self, base_x: int, base_y: int, description: str):
-        """アクティブ化してからクリック（座標調整版）"""
-        DEBUGLOG.info(f"{description}クリック準備開始")
-        if not self.chrome_manager.setup_window_and_activate():
-            DEBUGLOG.warning(f"ウィンドウ設定に失敗しましたが{description}をクリックします")
-        
-        adjusted_x, adjusted_y = self.chrome_manager.get_adjusted_coordinates(base_x, base_y)
-        
-        DEBUGLOG.info(f"{description}をクリック: ({adjusted_x}, {adjusted_y})")
-        pyautogui.click(adjusted_x, adjusted_y)
-        DEBUGLOG.info(f"{description}クリック完了")
-        return True
-
     def start_recording(self):
         """録画開始"""
         DEBUGLOG.info("録画開始処理")
         
-        # 1. ウィンドウサイズを650pxに設定
+        # 1. ウィンドウサイズを650pxに設定（クリック用）
         self.chrome_manager.driver.set_window_size(650, 500)
-        time.sleep(1)
+        time.sleep(0.3)
         
         # 2. 拡張機能アイコンクリック
         ext_x, ext_y = self.extension_coordinates['extension_icon']
         self.activate_and_click(ext_x, ext_y, "拡張機能アイコン")
-        time.sleep(1)
+        time.sleep(0.3)
 
-        # 3. スタートボタンクリック
+        # 3. スタートボタンクリック（650pxのまま）
         start_x, start_y = self.extension_coordinates['start_button']
         adjusted_start_x, adjusted_start_y = self.chrome_manager.get_adjusted_coordinates(start_x, start_y)
-        DEBUGLOG.info(f"スタートボタンをクリック: ({adjusted_start_x}, {adjusted_start_y})")
         pyautogui.click(adjusted_start_x, adjusted_start_y)
-        DEBUGLOG.info("スタートボタンクリック完了")
+        time.sleep(0.3)
         
-        # 4. ウィンドウサイズを200pxに変更
-        self.chrome_manager.driver.set_window_size(200, 200)
-        time.sleep(1)
+        # 4. 録画開始後、200x400に変更
+        self.chrome_manager.driver.set_window_size(200, 400)
+        time.sleep(0.3)
         
-        # 5. 再生ボタンクリック
+        # 5. 再生・フルスクリーン（200x400のまま）
         self.chrome_manager.click_play_button()
-        time.sleep(1)
-        
-        # 6. フルスクリーンボタンクリック
+        time.sleep(0.3)
         self.chrome_manager.click_fullscreen_button()
         
         self.recording_active = True
-        time.sleep(1)
+
+    def activate_and_click(self, base_x: int, base_y: int, description: str):
+        # setup_window_and_activate()は呼ばない（サイズを変えないため）
+        adjusted_x, adjusted_y = self.chrome_manager.get_adjusted_coordinates(base_x, base_y)
+        pyautogui.click(adjusted_x, adjusted_y)
+        return True
 
     def stop_recording(self):
         """録画停止（録画タブクローズ方式）"""
@@ -65,7 +54,7 @@ class RecordingController:
         success = self.chrome_manager.close_recording_tab_safely()
         
         if success:
-            time.sleep(2)  # ダウンロード完了待機
+            time.sleep(1)  # ダウンロード完了待機
             stop_time = int(time.time())
             self._save_stop_info(stop_time)
             self.recording_active = False

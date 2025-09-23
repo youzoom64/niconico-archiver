@@ -112,7 +112,7 @@ class ChromeManager:
         DEBUGLOG.info(f"ウィンドウ設定: 位置({target_x}, {target_y}), サイズ({w}x{h})")
         self.driver.set_window_position(target_x, target_y)
         self.driver.set_window_size(w, h)
-        time.sleep(1)
+        time.sleep(0.1)
         
         actual_rect = self.driver.get_window_rect()
         DEBUGLOG.info(f"実際のウィンドウ位置: x={actual_rect['x']}, y={actual_rect['y']}")
@@ -129,7 +129,7 @@ class ChromeManager:
             DEBUGLOG.info("デバッグChromeを新規起動します")
             if not self.launch_chrome_debug_mode():
                 return False
-            time.sleep(3)
+            time.sleep(0.5)
             if not self.connect_selenium():
                 return False
         
@@ -182,7 +182,7 @@ class ChromeManager:
             button = self.driver.find_element("css selector", '[class^="___fullscreen-button___"]')
             button.click()
             DEBUGLOG.info("Seleniumでフルスクリーンボタンをクリックしました")
-            time.sleep(2)
+            time.sleep(0.5)
             DEBUGLOG.info("フルスクリーンボタンクリック完了")
         except Exception as e:
             DEBUGLOG.warning(f"フルスクリーンボタンクリックでエラー: {e}")
@@ -194,7 +194,7 @@ class ChromeManager:
             button = self.driver.find_element("css selector", '[class^="___play-button___"]')
             button.click()
             DEBUGLOG.info("Seleniumで再生ボタンをクリックしました")
-            time.sleep(2)
+            time.sleep(0.5)
             DEBUGLOG.info("再生ボタンクリック完了")
         except Exception as e:
             DEBUGLOG.warning(f"再生ボタンクリックでエラー: {e}")
