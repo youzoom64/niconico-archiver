@@ -100,90 +100,98 @@ def main():
     DEBUGLOG.info("録画システム起動")
 
     try:
-        # 引数パース & タグ分解
+        # 1. 引数パース・タグ分解
         target_url, tag = parse_arguments()
         broadcast_id, broadcast_title, broadcaster_name, broadcaster_id = parse_broadcast_tag(tag)
 
-        # グローバル設定読み込み
-        global_cfg = load_global_config()
-        download_directory = global_cfg["system"]["download_directory"]
-
-        # ユーザー設定のロード
-        user_cfg = load_user_config(broadcaster_id)
-        platform_directory = None
-        if user_cfg and isinstance(user_cfg, dict):
-            basic = user_cfg.get('basic_settings', {}) or {}
-            platform_directory = basic.get('platform_directory')
-            DEBUGLOG.info(f"platform_directory: {platform_directory}")
-        else:
-            DEBUGLOG.warning("ユーザー設定が無い/不正のため、カレント配下に rec/ を作成して保存します")
-
-        # 保存先ディレクトリ作成
-        output_dir = ensure_output_dir(platform_directory, broadcaster_id, broadcaster_name)
-        
-        # 一時作業ディレクトリ
-        tmp_dir = os.path.join('.', 'tmp')
-
-        # 各マネージャーの初期化（順序重要）
+        # 2. Chrome準備（最優先）
         chrome_manager = ChromeManager(CHROME_PATH, USER_DATA_DIR, PROFILE_NAME, DEBUG_PORT, TARGET_MONITOR)
-        recording_controller = RecordingController(chrome_manager, EXTENSION_COORDINATES)
-        video_processor = VideoProcessor(tmp_dir, output_dir, download_directory)
-        segment_manager = SegmentManager(recording_controller, video_processor)
-        broadcast_monitor = BroadcastMonitor(broadcast_id)
-
-        # 一時ディレクトリセットアップ
-        video_processor.setup_tmp_directory()
-
-        # Chrome準備
         if not chrome_manager.prepare_debug_chrome():
             DEBUGLOG.error("Chrome準備に失敗しました")
             return False
 
-        # 新しいタブを作成してページ移動
+        # 3. タブ作成・ページ移動
         tab_handle = chrome_manager.create_new_recording_tab()
         chrome_manager.navigate_to_url(target_url)
 
-        # 1. 画面サイズ650px
+        # 4. 画面サイズ650px設定
         chrome_manager.driver.set_window_size(650, 500)
         time.sleep(0.3)
 
-        # 2. 録画アイコンクリック → スタートクリック
+        # 5. 最小限マネージャー初期化
+        recording_controller = RecordingController(chrome_manager, EXTENSION_COORDINATES)
+        tmp_dir = os.path.join('.', 'tmp')
+        output_dir = os.path.join("rec", f"{broadcaster_id}_{broadcaster_name}")
+        os.makedirs(output_dir, exist_ok=True)
+        video_processor = VideoProcessor(tmp_dir, output_dir, "Downloads")
+        segment_manager = SegmentManager(recording_controller, video_processor)
+        broadcast_monitor = BroadcastMonitor(broadcast_id)
+
+        # 6. 録画開始（セグメント録画開始）
         recording_start_time = segment_manager.start_segment_recording(broadcast_id, broadcast_title)
 
-        # 3. 画面サイズ200px x 200px
+        # 7. 画面サイズ200x400変更
         time.sleep(0.3)
         chrome_manager.driver.set_window_size(200, 400)
         time.sleep(0.3)
 
-        # 4. 再生ボタンクリック
+        # 8. 再生・フルスクリーンボタンクリック
         chrome_manager.click_play_button()
         time.sleep(0.3)
-
-        # 5. フルスクリーンボタンクリック
         chrome_manager.click_fullscreen_button()
+
+        # 9. 監視開始
+        broadcast_monitor.start_monitoring()
 
         print("30分セグメント録画が開始されました")
         print("配信終了まで自動録画を継続します")
         print(f"セグメント間隔: 30分")
-        print(f"保存先: {output_dir}")
-        DEBUGLOG.info(f"保存先: {output_dir}")
+        
+        # 10-13. バックグラウンド処理（録画開始後）
+        try:
+            # グローバル設定読み込み
+            global_cfg = load_global_config()
+            download_directory = global_cfg["system"]["download_directory"]
+            video_processor.download_directory = download_directory
 
-        # ユーザー設定自動生成
-        create_user_config_if_needed(
-            account_id=broadcaster_id,
-            display_name=broadcaster_name,
-            lv_no=broadcast_id,
-            lv_title=broadcast_title,
-            tab_id=tab_handle,
-            start_time=recording_start_time
-        )
-        broadcast_monitor.start_monitoring() 
-        # メインループ（配信終了まで待機）
+            # ユーザー設定読み込み
+            user_cfg = load_user_config(broadcaster_id)
+            platform_directory = None
+            if user_cfg and isinstance(user_cfg, dict):
+                basic = user_cfg.get('basic_settings', {}) or {}
+                platform_directory = basic.get('platform_directory')
+                DEBUGLOG.info(f"platform_directory: {platform_directory}")
+                
+                # 正式な保存先ディレクトリ作成
+                proper_output_dir = ensure_output_dir(platform_directory, broadcaster_id, broadcaster_name)
+                video_processor.output_dir = proper_output_dir
+                print(f"保存先: {proper_output_dir}")
+                DEBUGLOG.info(f"保存先: {proper_output_dir}")
+            else:
+                DEBUGLOG.warning("ユーザー設定が無い/不正のため、カレント配下に rec/ を作成して保存します")
+                print(f"保存先: {output_dir}")
+                DEBUGLOG.info(f"保存先: {output_dir}")
+
+            # 一時ディレクトリセットアップ
+            video_processor.setup_tmp_directory()
+
+            # ユーザー設定自動生成
+            create_user_config_if_needed(
+                account_id=broadcaster_id,
+                display_name=broadcaster_name,
+                lv_no=broadcast_id,
+                lv_title=broadcast_title,
+                tab_id=tab_handle,
+                start_time=recording_start_time
+            )
+        except Exception as e:
+            DEBUGLOG.warning(f"バックグラウンド処理でエラー: {e}")
+
+        # 14. メインループ（配信終了まで待機）
         try:
             while not broadcast_monitor.is_broadcast_ended():
-                time.sleep(5)  # 5秒間隔でチェック
+                time.sleep(5)
                 
-                # セグメント状態確認
                 if not segment_manager.is_segment_active():
                     DEBUGLOG.warning("セグメントが非アクティブになりました")
                     break
@@ -193,7 +201,7 @@ def main():
         except KeyboardInterrupt:
             DEBUGLOG.info("ユーザーによる停止要求を受信")
 
-        # 録画停止・後処理
+        # 15. 停止処理
         broadcast_monitor.stop_monitoring()
         segment_manager.stop_all_segments()
 
@@ -205,8 +213,7 @@ def main():
         DEBUGLOG.info(f"録画されたセグメント数: {len(recording_segments)}")
         DEBUGLOG.info(f"セグメント間隙間数: {len(segment_gaps)}")
 
-        # 各セグメントの動画ファイル処理（バックグラウンド処理で既に完了済み）
-        # 追加処理が必要な場合のみ実行
+        # 各セグメントの動画ファイル処理
         for segment in recording_segments:
             if segment['end_time'] and not segment.get('processed', False):
                 if not video_processor.process_segment(segment, broadcast_title):
@@ -226,12 +233,13 @@ def main():
         return False
     
     finally:
-        # クリーンアップ
         try:
-            video_processor.cleanup_tmp_directory()
+            if 'video_processor' in locals():
+                video_processor.cleanup_tmp_directory()
         except:
             pass
 
+        
 if __name__ == "__main__":
     try:
         success = bool(main())
