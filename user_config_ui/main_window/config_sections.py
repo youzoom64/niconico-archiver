@@ -140,3 +140,72 @@ class ConfigSectionsManager:
     def get_widget(self, name):
         """ウィジェットを取得"""
         return self.widgets.get(name)
+    
+    def create_server_settings(self):
+        """サーバー設定セクション"""
+        server_frame = tk.LabelFrame(self.parent, text="サーバー設定")
+        server_frame.pack(fill=tk.X, pady=5)
+        
+        # HTML FTP設定
+        html_frame = tk.LabelFrame(server_frame, text="HTML FTP設定")
+        html_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(html_frame, text="ホスト:").pack(anchor=tk.W)
+        tk.Entry(html_frame, textvariable=self.config_vars.get('html_ftp_host_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(html_frame, text="ユーザー:").pack(anchor=tk.W)
+        tk.Entry(html_frame, textvariable=self.config_vars.get('html_ftp_user_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(html_frame, text="パスワード:").pack(anchor=tk.W)
+        tk.Entry(html_frame, textvariable=self.config_vars.get('html_ftp_pass_var'), show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(html_frame, text="ベースURL:").pack(anchor=tk.W)
+        tk.Entry(html_frame, textvariable=self.config_vars.get('html_base_url_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        # 音声FTP設定
+        audio_frame = tk.LabelFrame(server_frame, text="音声FTP設定")
+        audio_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(audio_frame, text="ホスト:").pack(anchor=tk.W)
+        tk.Entry(audio_frame, textvariable=self.config_vars.get('audio_ftp_host_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(audio_frame, text="ユーザー:").pack(anchor=tk.W)
+        tk.Entry(audio_frame, textvariable=self.config_vars.get('audio_ftp_user_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(audio_frame, text="パスワード:").pack(anchor=tk.W)
+        tk.Entry(audio_frame, textvariable=self.config_vars.get('audio_ftp_pass_var'), show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(audio_frame, text="ベースURL:").pack(anchor=tk.W)
+        tk.Entry(audio_frame, textvariable=self.config_vars.get('audio_base_url_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        # スクリーンショットFTP設定
+        screenshot_frame = tk.LabelFrame(server_frame, text="スクリーンショットFTP設定")
+        screenshot_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(screenshot_frame, text="保存先:").pack(anchor=tk.W)
+        storage_combo = ttk.Combobox(screenshot_frame, textvariable=self.config_vars.get('screenshot_storage_var'),
+                                    values=["html_server", "separate_server"], state="readonly", width=30)
+        storage_combo.pack(anchor=tk.W, padx=5, pady=2)
+        
+        tk.Label(screenshot_frame, text="ホスト:").pack(anchor=tk.W)
+        tk.Entry(screenshot_frame, textvariable=self.config_vars.get('screenshot_ftp_host_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(screenshot_frame, text="ユーザー:").pack(anchor=tk.W)
+        tk.Entry(screenshot_frame, textvariable=self.config_vars.get('screenshot_ftp_user_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(screenshot_frame, text="パスワード:").pack(anchor=tk.W)
+        tk.Entry(screenshot_frame, textvariable=self.config_vars.get('screenshot_ftp_pass_var'), show="*", width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(screenshot_frame, text="ベースURL:").pack(anchor=tk.W)
+        tk.Entry(screenshot_frame, textvariable=self.config_vars.get('screenshot_base_url_var'), width=60).pack(fill=tk.X, padx=5, pady=2)
+        
+        # 全体設定
+        options_frame = tk.Frame(server_frame)
+        options_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        tk.Checkbutton(options_frame, text="音声ファイル含む", 
+                    variable=self.config_vars.get('include_audio_var')).pack(anchor=tk.W)
+        tk.Checkbutton(options_frame, text="スクリーンショット含む", 
+                    variable=self.config_vars.get('include_screenshots_var')).pack(anchor=tk.W)
+        tk.Checkbutton(options_frame, text="パッシブモード", 
+                    variable=self.config_vars.get('passive_mode_var')).pack(anchor=tk.W)

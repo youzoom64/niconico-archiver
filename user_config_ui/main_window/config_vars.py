@@ -78,7 +78,27 @@ class ConfigVarsManager:
             'tags_var': tk.StringVar(),
             
             # コールバック
-            'fetch_nickname_callback': self.fetch_nickname_callback
+            'fetch_nickname_callback': self.fetch_nickname_callback,
+
+            # config_manage/main_window/config_vars.py
+        
+            # サーバー設定
+            'html_ftp_host_var': tk.StringVar(),
+            'html_ftp_user_var': tk.StringVar(),
+            'html_ftp_pass_var': tk.StringVar(),
+            'html_base_url_var': tk.StringVar(),
+            'audio_ftp_host_var': tk.StringVar(value="ftp.lolipop.jp"),
+            'audio_ftp_user_var': tk.StringVar(),
+            'audio_ftp_pass_var': tk.StringVar(),
+            'audio_base_url_var': tk.StringVar(),
+            'screenshot_storage_var': tk.StringVar(value="html_server"),
+            'screenshot_ftp_host_var': tk.StringVar(),
+            'screenshot_ftp_user_var': tk.StringVar(),
+            'screenshot_ftp_pass_var': tk.StringVar(),
+            'screenshot_base_url_var': tk.StringVar(),
+            'include_audio_var': tk.BooleanVar(value=False),
+            'include_screenshots_var': tk.BooleanVar(value=True),
+            'passive_mode_var': tk.BooleanVar(value=True),
         }
     
     def get(self, key):

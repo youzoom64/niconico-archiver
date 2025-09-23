@@ -84,7 +84,9 @@ class WindowManager:
         self.special_users_manager.create_special_users_section()
         self.special_users_manager.create_special_users_detail_section()
         self.config_sections.create_tag_settings()
+        self.config_sections.create_server_settings()
         self.create_buttons(scrollable_frame)
+
         
         # ウィジェット参照を取得
         widgets = {

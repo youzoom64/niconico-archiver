@@ -105,11 +105,8 @@ def load_user_config(account_id: str):
 
 # run_broadcast_checker関数の前に追加
 def create_user_config_if_needed(account_id: str, display_name: str, lv_no: str, lv_title: str, tab_id: str, start_time: int):
-    """ユーザー設定が存在しない場合は自動生成"""
+    """ユーザー設定が存在しない場合は自動生成、存在する場合は更新"""
     config_path = os.path.join('config', 'users', f'{account_id}.json')
-    if os.path.exists(config_path):
-        DEBUGLOG.info(f"ユーザー設定が既に存在: {config_path}")
-        return
     
     script = 'create_user_config.py'
     if not os.path.exists(script):
@@ -127,17 +124,22 @@ def create_user_config_if_needed(account_id: str, display_name: str, lv_no: str,
         '-start_time', str(start_time)
     ]
     
-    DEBUGLOG.info(f"ユーザー設定生成スクリプト起動")
+    if os.path.exists(config_path):
+        DEBUGLOG.info(f"既存設定を更新: {config_path}")
+        cmd.append('-update_existing')
+    else:
+        DEBUGLOG.info(f"新規設定を生成: {config_path}")
+    
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         if res.returncode == 0:
-            DEBUGLOG.info("ユーザー設定生成成功")
+            DEBUGLOG.info("ユーザー設定処理成功")
         else:
-            DEBUGLOG.error(f"ユーザー設定生成失敗: returncode={res.returncode}")
+            DEBUGLOG.error(f"ユーザー設定処理失敗: returncode={res.returncode}")
             if res.stderr:
                 DEBUGLOG.error(f"[stderr]\n{res.stderr}")
     except Exception as e:
-        DEBUGLOG.error(f"ユーザー設定生成スクリプト起動失敗: {e}")
+        DEBUGLOG.error(f"ユーザー設定スクリプト起動失敗: {e}")
 
 # 追加: 保存ディレクトリの生成
 def ensure_output_dir(platform_directory: str, account_id: str, display_name: str) -> str:
@@ -461,7 +463,18 @@ def play_button_clickI():
     except Exception as e:
         DEBUGLOG.warning(f"再生ボタンクリックでエラー: {e}")
 
+def load_global_config():
+    path = os.path.join("config", "global_config.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"system": {"download_directory": "Downloads"}}
+
+
 def main():
+    # グローバル設定を優先
+    global_cfg = load_global_config()
+    download_directory = global_cfg["system"]["download_directory"]
     """メイン処理"""
     global recording_start_time, target_url, broadcast_id, broadcast_title, broadcaster_name, broadcaster_id, output_dir
 

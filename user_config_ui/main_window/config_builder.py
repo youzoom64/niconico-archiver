@@ -19,7 +19,8 @@ class ConfigBuilder:
             "display_features": self._build_display_features(),
             "special_users": self._build_special_users(),
             "tags": self._build_tags(),
-            "special_users_config": self._build_special_users_config()
+            "special_users_config": self._build_special_users_config(),
+            "server_settings": self._build_server_settings()
         }
     
     def _build_basic_settings(self):
@@ -123,3 +124,23 @@ class ConfigBuilder:
         if prompt_text_widget:
             return prompt_text_widget.get(1.0, "end-1c").strip()
         return ""
+    
+    def _build_server_settings(self):
+        return {
+            "html_ftp_host": self.config_vars['html_ftp_host_var'].get(),
+            "html_ftp_user": self.config_vars['html_ftp_user_var'].get(),
+            "html_ftp_pass": self.config_vars['html_ftp_pass_var'].get(),
+            "html_base_url": self.config_vars['html_base_url_var'].get(),
+            "audio_ftp_host": self.config_vars['audio_ftp_host_var'].get(),
+            "audio_ftp_user": self.config_vars['audio_ftp_user_var'].get(),
+            "audio_ftp_pass": self.config_vars['audio_ftp_pass_var'].get(),
+            "audio_base_url": self.config_vars['audio_base_url_var'].get(),
+            "screenshot_storage": self.config_vars['screenshot_storage_var'].get(),
+            "screenshot_ftp_host": self.config_vars['screenshot_ftp_host_var'].get(),
+            "screenshot_ftp_user": self.config_vars['screenshot_ftp_user_var'].get(),
+            "screenshot_ftp_pass": self.config_vars['screenshot_ftp_pass_var'].get(),
+            "screenshot_base_url": self.config_vars['screenshot_base_url_var'].get(),
+            "include_audio": self.config_vars['include_audio_var'].get(),
+            "include_screenshots": self.config_vars['include_screenshots_var'].get(),
+            "passive_mode": self.config_vars['passive_mode_var'].get()
+        }
